@@ -1,7 +1,6 @@
 import pandas as pd
 import PolygonsFactory as pf
-from sklearn.datasets import fetch_openml
-
+from sklearn import datasets
 
 class DataSet:
     """
@@ -24,19 +23,35 @@ class DataSetFactory:
         Get MNIST dataset
         :return: DataSet Object which holds MNIST data
         """
-        X, y = fetch_openml('mnist_784', version=1, return_X_y=True)
+        X, y = datasets.fetch_openml('mnist_784', version=1, return_X_y=True)
         X = X / 255.
         feature_cols = ['pixel' + str(i) for i in range(X.shape[1])]
         df = pd.DataFrame(X, columns=feature_cols)
         df['y'] = y
         df['label'] = df['y'].apply(lambda i: str(i))
-        return DataSet(df, feature_cols, 'label')
+        return DataSet(df, feature_cols, 'y')
+
+    @staticmethod
+    def mnist64():
+        """
+        Get MNIST dataset
+        :return: DataSet Object which holds MNIST data
+        """
+        X, y = datasets.load_digits(return_X_y=True)
+        X = X / 255.
+        feature_cols = ['pixel' + str(i) for i in range(X.shape[1])]
+        df = pd.DataFrame(X, columns=feature_cols)
+        df['y'] = y
+        df['label'] = df['y'].apply(lambda i: str(i))
+        return DataSet(df, feature_cols, 'y')
 
 
     @staticmethod
     def get_dataset(dataset_name):
         if dataset_name == 'MNIST':
             return DataSetFactory.mnist()
+        if dataset_name == 'MNIST64':
+            return DataSetFactory.mnist64()
         elif dataset_name == 'fists_no_overlap':
             df, feature_cols, label_col = pf.PolygonsFactory.get_polygons('fists_no_overlap')
             return DataSet(df, feature_cols, label_col)

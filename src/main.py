@@ -11,7 +11,7 @@ def vis_2d(_df, _x, _y, _color, _algo):
     fig.show()
 
 fists_ds = DataSetFactory.get_dataset('cross')#('fists_no_overlap')
-amap = AMAP()
+amap = AMAP(verbose=False, n_intra_anchors=5, k=5)
 low_dim = amap.fit_transform(fists_ds.df[fists_ds.feature_cols].values, fists_ds.df[fists_ds.label_col].values)
 
 df = pd.DataFrame(data=low_dim, columns=['x', 'y'])

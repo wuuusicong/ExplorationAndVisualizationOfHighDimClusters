@@ -160,7 +160,7 @@ class PolygonsGenerator:
             tmp_df = pd.DataFrame(poly[PolygonsGenerator.INNER_POINTS])
             feature_cols = [PolygonsGenerator.X_COL, PolygonsGenerator.Y_COL, PolygonsGenerator.Z_COL]
             tmp_df.columns = feature_cols
-            tmp_df[PolygonsGenerator.POLY_COL] = f' {i}'
+            tmp_df[PolygonsGenerator.POLY_COL] = i  #f' {i}'
             dfs.append(tmp_df)
         df = pd.concat(dfs)
 

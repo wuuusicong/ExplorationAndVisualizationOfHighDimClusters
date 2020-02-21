@@ -7,7 +7,7 @@ from sklearn.manifold import MDS
 
 
 class UMAPDimReduction:
-    def __init__(self, n_components=2, a=1, b=1, random_state=0, max_iter=30, learning_rate=1):
+    def __init__(self, n_components=2, a=1, b=1, random_state=None, max_iter=300, learning_rate=1):
         """
         NOTE that at this point I will use a=1 and b=1 need to read and understand implications
         since UMAP does curve fit to a and b based on the min_dist hyper-parameter
@@ -60,17 +60,18 @@ class UMAPDimReduction:
         return 2 * self.b * np.sum(fact * y_diff * np.expand_dims(inv_dist, 2), axis=1)
 
     def fit_transform(self, X, labels, P):
-        np.random.seed(self.random_state)
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
         # TODO ORM neighbors?
         # TODO ORM for simplicity I will start will PCA initialization or random
-        # model = SpectralEmbedding(n_components=self.n_components, n_neighbors=5)
+        model = SpectralEmbedding(n_components=self.n_components, n_neighbors=5)
         # model = PCA(n_components=self.n_components)
-        model = MDS(n_components=self.n_components)
+        # model = MDS(n_components=self.n_components)
         # TODO ORM why it was fit transform on log?
         # y = model.fit_transform(np.log(X + 1))
         y = model.fit_transform(X)
         # y = np.random.normal(loc = 0, scale = 1, size = (n, N_LOW_DIMS))
-        # y = np.random.rand(len(X), 2)
+        y = np.random.rand(len(X), 2)
 
         # TODO ORM debug
         print(labels.astype(int))
