@@ -1,6 +1,7 @@
 import pandas as pd
 import PolygonsFactory as pf
 from sklearn import datasets
+from sklearn.decomposition import PCA
 
 class DataSet:
     """
@@ -45,6 +46,33 @@ class DataSetFactory:
         df['label'] = df['y'].apply(lambda i: str(i))
         return DataSet(df, feature_cols, 'y')
 
+    @staticmethod
+    def mnist64_038():
+        """
+        Get MNIST dataset of digits 0, 3 and 8
+        :return: DataSet Object which holds MNIST data
+        """
+        ds = DataSetFactory.mnist64()
+        ds.df = ds.df[ds.df['y'].isin([0,3,8])]
+        ds.df['y'] = ds.df['y'].replace({0: 0, 3: 1, 8: 2})
+        return ds
+
+    @staticmethod
+    def mnist_038_pca_d(d=32):
+        """
+        Get MNIST dataset of digits 0, 3 and 8
+        :return: DataSet Object which holds MNIST data
+        """
+        ds = DataSetFactory.mnist()
+        ds.df = ds.df[ds.df['y'].isin(['0', '3', '8'])]
+        ds.df['y'] = ds.df['y'].replace({'0': 0, '3': 1, '8': 2})
+        pca = PCA(n_components=d)
+        low_dim = pca.fit_transform(ds.df[ds.feature_cols])
+        new_features = [f'{i}' for i in range(d)]
+        new_df = pd.DataFrame(low_dim, columns=new_features)
+        new_df['y'] = ds.df['y'].values
+        return DataSet(new_df, new_features, 'y')
+
 
     @staticmethod
     def get_dataset(dataset_name):
@@ -52,11 +80,14 @@ class DataSetFactory:
             return DataSetFactory.mnist()
         if dataset_name == 'MNIST64':
             return DataSetFactory.mnist64()
-        elif dataset_name == 'fists_no_overlap':
-            df, feature_cols, label_col = pf.PolygonsFactory.get_polygons('fists_no_overlap')
-            return DataSet(df, feature_cols, label_col)
-        elif dataset_name == 'cross':
-            df, feature_cols, label_col = pf.PolygonsFactory.get_polygons('cross')
+        if dataset_name == 'MNIST64_038':
+            return DataSetFactory.mnist64_038()
+        if dataset_name == 'MNIST_038_PCA32':
+            return DataSetFactory.mnist_038_pca_d()
+        if dataset_name == 'MNIST_038_PCA16':
+            return DataSetFactory.mnist_038_pca_d(16)
+        elif dataset_name in ['fists_no_overlap', 'cross', 'simple_overlap', 'dense_in_sparse', 'hourglass']:
+            df, feature_cols, label_col = pf.PolygonsFactory.get_polygons(dataset_name)
             return DataSet(df, feature_cols, label_col)
         else:
             raise Exception(f'Unsupported dataset {dataset_name}')

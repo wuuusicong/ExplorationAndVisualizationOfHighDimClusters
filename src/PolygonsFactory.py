@@ -29,9 +29,8 @@ class PolygonsGenerator:
                              'rgb(227, 119, 194)', 'rgb(127, 127, 127)',
                              'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
 
-    def __init__(self, smooth_iter=3, random_points=20):
+    def __init__(self, smooth_iter=3, random_points=200):
         """
-        TODO
         :param smooth_iter:
         :param random_points:
         """
@@ -318,6 +317,78 @@ class PolygonsFactory:
                     [0, -5],
                 ],
                     PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == 'simple_overlap':
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [1,2],
+                    [3,4],
+                    [6,4],
+                    [8,2],
+                    [6,0],
+                    [3,0],
+                    [1,2]
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                {PolygonsGenerator.POLY: [
+                    [1, 2],
+                    [3, 4],
+                    [5, 2],
+                    [3, 0],
+                    [1, 2]
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 3)},
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == 'dense_in_sparse':
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [0, 2],
+                    [3, 6],
+                    [7, 2],
+                    [3, -2],
+                    [0, 2]
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                {PolygonsGenerator.POLY: [
+                    [2.9, 2],
+                    [3, 3.1],
+                    [3.1, 2],
+                    [3, 2.9],
+                    [2.9, 2]
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.1)},
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == 'hourglass':
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [1,2],
+                    [3,4],
+                    [5,2.2],
+                    [7,4],
+                    [9,2],
+                    [7,0],
+                    [5, 1.8],
+                    [3,0],
+                    [1,2]
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.1)},
+                {PolygonsGenerator.POLY: [
+                    [4.8,2.5],
+                    [5.2,2.5],
+                    [5.2,1.5],
+                    [4.8,1.5],
+                    [4.8,2.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.01)},
             ]
             return pg.preprocess_polygons(polys)
         else:

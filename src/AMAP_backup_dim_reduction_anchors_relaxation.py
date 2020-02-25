@@ -55,11 +55,13 @@ class AMAP:
 
         # Late initialized members
         self.num_clusters_each_label = []
+        self.y_with_centroids = None
         self.clusters = None  # clusters within each label
         self.intra_class_anchors = None
         self.intra_class_anchors_labels = None
         self.intra_class_anchors_indices = None  # Note Assuming that if not valid centroids the centroids are concatenated
         self.low_dim_anchors = None
+        self.low_dim_points = None
         self.knng = None
         self.inter_class_relations = None
         self.inter_class_relations_low_dim = None
@@ -92,9 +94,10 @@ class AMAP:
         # Note that in order to perform random walks when valid_centroid is False, the computed centroids must be part
         # of the data. Therefore create an instance of X and y with the new centroids
 
-
         X_with_centroids = np.concatenate((X, self.intra_class_anchors), axis=0)
         y_with_centroids = np.concatenate((y, self.intra_class_anchors_labels))
+        # save labels for future use
+        self.y_with_centroids = y_with_centroids
 
         # TODO For debug
         # self.X_with_centroids = X_with_centroids
@@ -165,10 +168,10 @@ class AMAP:
         self.clusters = df[cluster_col].values.astype(int)
         # Find Centroids
         intra_centroids_df = df.groupby([label_col, cluster_col]).mean().sort_index().reset_index()
-        self.print_verbose(f'intra class centroids\n {intra_centroids_df.to_string()}')
+        # self.print_verbose(f'intra class centroids\n {intra_centroids_df.to_string()}')
         self.intra_class_anchors_labels = intra_centroids_df[label_col].values
         self.intra_class_anchors = intra_centroids_df[feature_cols].values
-        self.print_verbose(f'intra class centroids\n {intra_centroids_df[feature_cols].to_string()}')
+        # self.print_verbose(f'intra class centroids\n {intra_centroids_df[feature_cols].to_string()}')
         # Calc high dim properties
         self._calc_high_dim_clusters_properties(df, label_col, cluster_col, intra_centroids_df)
 
@@ -193,7 +196,6 @@ class AMAP:
     def _build_knng(self, X):
         # Note that in order to perform random walks when valid_centroid is False, the computed centroids must be part
         # of the data
-        self.print_verbose(f'X.shape={X.shape}')
         self.knng = kneighbors_graph(X, self.k, mode='distance', n_jobs=self.n_jobs)
 
     def _get_inter_class_anchors(self, X, y):
@@ -248,13 +250,57 @@ class AMAP:
             anchor_x1 = self._sample_index_to_anchor(y[x1], self.clusters[x1])
             anchor_x2 = self._sample_index_to_anchor(y[x2], self.clusters[x2])
             self.inter_class_relations[anchor_x1][anchor_x2] += 1
-        # TODO ORM do we want symmetry?
-        # Normalize for each anchor
-        self.inter_class_relations = self.inter_class_relations / self.inter_class_relations.sum(axis=1, keepdims=True)
         if not self.self_relation:
             np.fill_diagonal(self.inter_class_relations, 0)
+        # Normalize for each anchor
+        self.inter_class_relations = self.inter_class_relations / self.inter_class_relations.sum(axis=1, keepdims=True)
 
-    def _dim_reduction(self, X, y, anchors_indices):
+    def calc_low_dim_inter_class_relations(self, y):
+        """
+        TODO ORM merge with _calc_inter_class_relations
+        :param X:
+        :return:
+        """
+
+        # low_dim_points_arr = [self.low_dim_anchors]
+        #     anchors_series = list(range(len(self.low_dim_anchors)))
+        #     labels_series = [self.anchor_to_label_cluster(anchor_index)[0] for anchor_index in range(len(self.low_dim_anchors))]
+        #     for anchor_index in range(len(self.low_dim_anchors)):
+        #         points = self.random_points_per_cluster(anchor_index)
+        #         low_dim_points_arr.append(points)
+        #         anchors_series.extend([anchor_index] * len(points))
+        #         labels_series.extend([self.anchor_to_label_cluster(anchor_index)[0]] * len(points))
+        #     low_dim_points = np.concatenate(low_dim_points_arr)
+        #     # calc knng
+        #     knng = kneighbors_graph(low_dim_points, self.k, mode='distance', n_jobs=self.n_jobs)
+        #     self.inter_class_relations_low_dim = np.zeros(
+        #         (len(self.low_dim_anchors), len(self.low_dim_anchors)))
+        #     edges_x1, edges_x2 = knng.nonzero()
+        #     # Initialize inter class anchors
+        #     for x1, x2 in zip(edges_x1, edges_x2):
+        #         anchor_x1 = anchors_series[x1]
+        #         anchor_x2 = anchors_series[x2]
+        #         self.inter_class_relations_low_dim[anchor_x1][anchor_x2] += 1
+        #     # TODO ORM do we want symmetry?
+        #     # Normalize for each anchor
+        #     self.inter_class_relations_low_dim = self.inter_class_relations_low_dim / self.inter_class_relations_low_dim.sum(axis=1, keepdims=True)
+        #     if not self.self_relation:
+        #         np.fill_diagonal(self.inter_class_relations_low_dim, 0)
+
+        knng = kneighbors_graph(self.low_dim_points, self.k, mode='distance', n_jobs=self.n_jobs)
+        self.inter_class_relations_low_dim = np.zeros((len(self.intra_class_anchors_labels), len(self.intra_class_anchors_labels)))
+        edges_x1, edges_x2 = knng.nonzero()
+        # Initialize inter class anchors
+        for x1, x2 in zip(edges_x1, edges_x2):
+            anchor_x1 = self._sample_index_to_anchor(y[x1], self.clusters[x1])
+            anchor_x2 = self._sample_index_to_anchor(y[x2], self.clusters[x2])
+            self.inter_class_relations_low_dim[anchor_x1][anchor_x2] += 1
+        if not self.self_relation:
+            np.fill_diagonal(self.inter_class_relations_low_dim, 0)
+        # Normalize for each anchor
+        self.inter_class_relations_low_dim = self.inter_class_relations_low_dim / self.inter_class_relations_low_dim.sum(axis=1, keepdims=True)
+
+    def _dim_reduction(self, X, y, anchors_indices, supervised=False):
         """
         NOTE that at this point I will use a=1 and b=1 need to read and understand implications
         since UMAP does curve fit to a and b based on the min_dist hyper-parameter
@@ -277,8 +323,14 @@ class AMAP:
             pass
         else:
             raise Exception(f'Dimension reduction algorithm {self.dim_reduction_algo} is not supported')
-        self.print_verbose(X[anchors_indices])
-        self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(X[anchors_indices])
+        # self.print_verbose(X[anchors_indices])
+        # self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(X[anchors_indices])
+        if supervised:
+            self.print_verbose('Supervised Dim Reduction')
+            self.low_dim_points = dim_reduction_algo_inst.fit_transform(X, y)
+        else:
+            self.print_verbose('UnSupervised Dim Reduction')
+            self.low_dim_points = dim_reduction_algo_inst.fit_transform(X)
 
     def random_points_per_cluster(self, anchor_index):
         # TODO ORM for now random points in box instead of circle
@@ -298,35 +350,35 @@ class AMAP:
                 random_points[i][2] = np.random.uniform(low=minz, high=maxz)
         return random_points
 
-    def calc_low_dim_inter_class_relations(self):
-        # TODO: Note if I am using radius length from the high dimension, probably we need to use MDS
-        # TODO: otherwise it doesn't make sense at all!
-        # TODO: calc radius for each anchor in the high dimension once
-        # initialize with the anchors
-        low_dim_points_arr = [self.low_dim_anchors]
-        anchors_series = list(range(len(self.low_dim_anchors)))
-        labels_series = [self.anchor_to_label_cluster(anchor_index)[0] for anchor_index in range(len(self.low_dim_anchors))]
-        for anchor_index in range(len(self.low_dim_anchors)):
-            points = self.random_points_per_cluster(anchor_index)
-            low_dim_points_arr.append(points)
-            anchors_series.extend([anchor_index] * len(points))
-            labels_series.extend([self.anchor_to_label_cluster(anchor_index)[0]] * len(points))
-        low_dim_points = np.concatenate(low_dim_points_arr)
-        # calc knng
-        knng = kneighbors_graph(low_dim_points, self.k, mode='distance', n_jobs=self.n_jobs)
-        self.inter_class_relations_low_dim = np.zeros(
-            (len(self.low_dim_anchors), len(self.low_dim_anchors)))
-        edges_x1, edges_x2 = knng.nonzero()
-        # Initialize inter class anchors
-        for x1, x2 in zip(edges_x1, edges_x2):
-            anchor_x1 = anchors_series[x1]
-            anchor_x2 = anchors_series[x2]
-            self.inter_class_relations_low_dim[anchor_x1][anchor_x2] += 1
-        # TODO ORM do we want symmetry?
-        # Normalize for each anchor
-        self.inter_class_relations_low_dim = self.inter_class_relations_low_dim / self.inter_class_relations_low_dim.sum(axis=1, keepdims=True)
-        if not self.self_relation:
-            np.fill_diagonal(self.inter_class_relations_low_dim, 0)
+    # def calc_low_dim_inter_class_relations(self):
+    #     # TODO: Note if I am using radius length from the high dimension, probably we need to use MDS
+    #     # TODO: otherwise it doesn't make sense at all!
+    #     # TODO: calc radius for each anchor in the high dimension once
+    #     # initialize with the anchors
+    #     low_dim_points_arr = [self.low_dim_anchors]
+    #     anchors_series = list(range(len(self.low_dim_anchors)))
+    #     labels_series = [self.anchor_to_label_cluster(anchor_index)[0] for anchor_index in range(len(self.low_dim_anchors))]
+    #     for anchor_index in range(len(self.low_dim_anchors)):
+    #         points = self.random_points_per_cluster(anchor_index)
+    #         low_dim_points_arr.append(points)
+    #         anchors_series.extend([anchor_index] * len(points))
+    #         labels_series.extend([self.anchor_to_label_cluster(anchor_index)[0]] * len(points))
+    #     low_dim_points = np.concatenate(low_dim_points_arr)
+    #     # calc knng
+    #     knng = kneighbors_graph(low_dim_points, self.k, mode='distance', n_jobs=self.n_jobs)
+    #     self.inter_class_relations_low_dim = np.zeros(
+    #         (len(self.low_dim_anchors), len(self.low_dim_anchors)))
+    #     edges_x1, edges_x2 = knng.nonzero()
+    #     # Initialize inter class anchors
+    #     for x1, x2 in zip(edges_x1, edges_x2):
+    #         anchor_x1 = anchors_series[x1]
+    #         anchor_x2 = anchors_series[x2]
+    #         self.inter_class_relations_low_dim[anchor_x1][anchor_x2] += 1
+    #     # TODO ORM do we want symmetry?
+    #     # Normalize for each anchor
+    #     self.inter_class_relations_low_dim = self.inter_class_relations_low_dim / self.inter_class_relations_low_dim.sum(axis=1, keepdims=True)
+    #     if not self.self_relation:
+    #         np.fill_diagonal(self.inter_class_relations_low_dim, 0)
 
     @staticmethod
     def l_inf_loss(X, Y):
@@ -368,8 +420,10 @@ class AMAP:
                 # update src anchor
                 self.low_dim_anchors[src_anchor_index] = new_src_anchor
             if self.verbose:
-                df = pd.DataFrame(data=self.low_dim_anchors, columns=['x', 'y'])
-                df['label'] = self.intra_class_anchors_labels
+                # df = pd.DataFrame(data=self.low_dim_anchors, columns=['x', 'y'])
+                # df['label'] = self.intra_class_anchors_labels
+                df = pd.DataFrame(data=self.low_dim_points, columns=['x', 'y'])
+                df['label'] = self.y_with_centroids
                 AMAP.vis_2d(df, 'x', 'y', 'label', f'iter{i}', f'relaxation_images/iter{i}.png')
 
     @staticmethod
