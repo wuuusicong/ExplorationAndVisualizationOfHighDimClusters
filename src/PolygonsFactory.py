@@ -11,6 +11,8 @@ import plotly.graph_objects as go
 import alphashape
 import shapely
 
+import plotly.io as pio
+pio.renderers.default = "png"
 
 class PolygonsGenerator:
     POLY = 'poly'
