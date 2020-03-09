@@ -12,7 +12,7 @@ import alphashape
 import shapely
 
 import plotly.io as pio
-pio.renderers.default = "png"
+# pio.renderers.default = "png"
 
 class PolygonsGenerator:
     POLY = 'poly'
@@ -38,6 +38,12 @@ class PolygonsGenerator:
         """
         self.smooth_iter = smooth_iter
         self.random_points = random_points
+
+    def smooth_poly_Douglas_Peucker(self, poly):
+        _poly = Polygon(poly)
+        _poly = _poly.simplify(0.2, preserve_topology=False)
+        x, y = _poly.exterior.coords.xy
+        return [[x[i], y[i]] for i in range(len(x))]
 
     def smooth_poly_Chaikins_corner_cutting_iter(self, poly):
         new_poly = poly[:]
@@ -106,8 +112,19 @@ class PolygonsGenerator:
             random_points = self.random_points
 
         for i in range(len(polys)):
-            polys[i][PolygonsGenerator.SMOOTH_POLY] = np.array(self.smooth_poly_Chaikins_corner_cutting_iter(
-                polys[i][PolygonsGenerator.POLY]))
+            dp = True
+            if dp:
+                polys[i][PolygonsGenerator.SMOOTH_POLY] = np.array(self.smooth_poly_Douglas_Peucker(
+                    polys[i][PolygonsGenerator.POLY]))
+            else:
+                polys[i][PolygonsGenerator.SMOOTH_POLY] = np.array(self.smooth_poly_Chaikins_corner_cutting_iter(
+                    polys[i][PolygonsGenerator.POLY]))
+
+            # polys[i][PolygonsGenerator.SMOOTH_POLY] = np.array(self.smooth_poly_Douglas_Peucker(
+            #     polys[i][PolygonsGenerator.POLY]))
+            # polys[i][PolygonsGenerator.SMOOTH_POLY] = np.array(self.smooth_poly_Chaikins_corner_cutting_iter(
+            #     polys[i][PolygonsGenerator.POLY]))
+            #
             polys[i][PolygonsGenerator.INNER_POINTS] = np.array(PolygonsGenerator.random_points_inside_polygon_and_3d(
                 polys[i][PolygonsGenerator.SMOOTH_POLY],
                 random_points[i],
@@ -379,6 +396,34 @@ class PolygonsFactory:
                     [5, 1.8],
                     [3,0],
                     [1,2]
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.1)},
+                {PolygonsGenerator.POLY: [
+                    [4.8,2.5],
+                    [5.2,2.5],
+                    [5.2,1.5],
+                    [4.8,1.5],
+                    [4.8,2.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.01)},
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == 'hourglass-spike':
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [-5,1.8],
+                    [1,2.1],
+                    [3,4],
+                    [5,2.2],
+                    [7,4],
+                    [9,2],
+                    [7,0],
+                    [5, 1.8],
+                    [3,0],
+                    [1,1.9],
+                    [-5, 1.8]
                 ],
                     PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
                     PolygonsGenerator.Z_DIST: (0, 0.1)},

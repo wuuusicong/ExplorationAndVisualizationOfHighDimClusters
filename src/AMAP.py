@@ -29,14 +29,19 @@ sns.set_style("darkgrid")
 class AMAP:
     def __init__(self, n_components: int = 2, anchors_method: str = 'birch', n_intra_anchors: int = None,
                  birch_threshold: float = 0.3, birch_branching_factor: int = None,
-                 dim_reduction_algo: str = 'umap', supervised: bool = False, reduce_all_points: bool = False,
+                 dim_reduction_algo: str = 'umap', supervised: bool = False, umap_n_neighbors: int = 15,
+                 umap_min_dist: int = 1, reduce_all_points: bool = False,
                  uniform_points_per: str = 'anchor',
                  k: int = 20, self_relation: bool = False, radius_q: float = 1, do_relaxation: bool = True,
                  top_greedy: int = 1, magnitude_step: bool = False, n_iter: int = 10, batch_size: int = 1,
-                 stop_criteria: float = 0.00001, loss: str = 'mse', learning_rate: float = None, random_points_in_box: bool = False,
+                 stop_criteria: float = 0.00001, loss: str = 'mse', only_inter_relations: bool = False,
+                 learning_rate: float = None, random_points_in_box: bool = False,
                  class_to_label: dict = None, random_state: int = None, n_jobs: int = None, verbose: bool = True,
                  dataset: str = 'default', show_fig: bool = True, save_fig: bool = True, is_plotly: bool = False,
-                 do_animation=True, use_spline: bool = False, alpha: float = 1):
+                 do_animation=True, use_spline: bool = False, alpha: float = 1, douglas_peucker_tolerance: float = 0.6,
+                 smooth_iter: int = 13,
+                 show_relations: bool = False, save_fig_every: int = 1, show_anchors: bool = False,
+                 show_points: bool = False, show_polygons: bool = True):
         """
         :param n_components:
         :param anchors_method:
@@ -79,7 +84,7 @@ class AMAP:
         if k < 0:
             raise Exception(f'k must be greater than 0')
 
-        if not 0 < radius_q <=1:
+        if radius_q is not None and not 0 < radius_q <=1:
             raise Exception(f'radius_q must bi in (0, 1]')
 
         if top_greedy < 0:
@@ -105,6 +110,8 @@ class AMAP:
         self.birch_branching_factor = birch_branching_factor
         self.dim_reduction_algo = dim_reduction_algo
         self.supervised = supervised
+        self.umap_n_neighbors = umap_n_neighbors
+        self.umap_min_dist = umap_min_dist
         self.reduce_all_points = reduce_all_points
         self.uniform_points_per = uniform_points_per
         self.k = k  # note that in t-sne paper when they presented this method they used k=20 for mnist
@@ -123,6 +130,7 @@ class AMAP:
         else:
             raise Exception(f'Unsupported loss {loss}')
         self.loss = loss
+        self.only_inter_relations = only_inter_relations
         self.learning_rate = learning_rate
         self.random_points_in_box = random_points_in_box
         self.class_to_label = class_to_label
@@ -135,6 +143,13 @@ class AMAP:
         self.do_animation = do_animation
         self.use_spline = use_spline
         self.alpha = alpha
+        self.douglas_peucker_tolerance = douglas_peucker_tolerance
+        self.smooth_iter = smooth_iter
+        self.show_relations = show_relations
+        self.save_fig_every = save_fig_every
+        self.show_points = show_points
+        self.show_anchors = show_anchors
+        self.show_polygons = show_polygons
 
         # create output dir
         now = datetime.now()
@@ -313,35 +328,11 @@ class AMAP:
         radius_df = radius_df ** 2
         radius_df = radius_df.sum(axis=1)
         radius_df = radius_df ** (0.5)
-        radius_df = radius_df.groupby(level=[0, 1]).quantile(q=self.radius_q)
+        radius_df = radius_df.groupby(level=[0, 1]).quantile(q=self.radius_q if self.radius_q is not None else 1)
         self.anchors_radius = radius_df.values
 
     def _build_knng(self, X):
-        # Note that in order to perform random walks when valid_centroid is False, the computed centroids must be part
-        # of the data
         self.knng = kneighbors_graph(X, self.k, mode='distance', n_jobs=self.n_jobs)
-
-    def _get_inter_class_anchors(self, X, y):
-        edges_x1, edges_x2 = self.knng_penalty.nonzero()
-        # Initialize inter class anchors
-        inter_class_anchors_indices = set()
-        for x1, x2 in zip(edges_x1, edges_x2):
-            # x1 is the index of sample x1 in X x2 is the index of sample x2 in X
-            # x1 and x2 are neighbors in the KNNG
-            # We want to keep only x1 and x2 where y[x1]!=y[x2] meaning points from different classes
-            if y[x1] == y[x2]:
-                # Neighbors from the same class - continue
-                self.print_verbose(f'x1={x1} and x2={x2} are from the same class {y[x1]}={y[x2]}')
-                continue
-            # Now x1 and x2 are neighbors from different classes
-            self.print_verbose(f'x1={x1} and x2={x2} are not from the same class {y[x1]}!={y[x2]}')
-            inter_class_anchors_indices.add(x1)
-        inter_class_anchors_indices = list(inter_class_anchors_indices)
-        self.print_verbose(f'found {len(inter_class_anchors_indices)}')
-        self.inter_class_anchors_labels = y[inter_class_anchors_indices]
-        self.print_verbose(f'found \n{pd.Series(self.inter_class_anchors_labels).value_counts().to_string()}')
-        self.inter_class_anchors = X[inter_class_anchors_indices]
-        self.inter_class_anchors_indices = inter_class_anchors_indices
 
     def _sample_index_to_anchor(self, label, cluster):
         anchor_index = 0
@@ -379,6 +370,16 @@ class AMAP:
             self.inter_class_relations[anchor_x1][anchor_x2] += 1
         if not self.self_relation:
             np.fill_diagonal(self.inter_class_relations, 0)
+
+        if self.only_inter_relations:
+            # fill zeros in indices where anchors are from the same label
+            for i in range(len(self.intra_class_anchors_labels)):
+                for j in range(len(self.intra_class_anchors_labels)):
+                    label_i = self.y_with_centroids[self.anchors_indices[i]]
+                    label_j = self.y_with_centroids[self.anchors_indices[j]]
+                    if label_i == label_j:
+                        self.inter_class_relations[i][j] = 0
+
         # Normalize for each anchor
         sum_row = self.inter_class_relations.sum(axis=1, keepdims=True)
         # replace with 1 where the sum is 0 to avoid division by 0
@@ -401,6 +402,15 @@ class AMAP:
         if not self.self_relation:
             np.fill_diagonal(self.inter_class_relations_low_dim, 0)
 
+        if self.only_inter_relations:
+            # fill zeros in indices where anchors are from the same label
+            for i in range(len(self.intra_class_anchors_labels)):
+                for j in range(len(self.intra_class_anchors_labels)):
+                    label_i = self.y_with_centroids[self.anchors_indices[i]]
+                    label_j = self.y_with_centroids[self.anchors_indices[j]]
+                    if label_i == label_j:
+                        self.inter_class_relations_low_dim[i][j] = 0
+
         # Normalize for each anchor
         sum_row = self.inter_class_relations_low_dim.sum(axis=1, keepdims=True)
         # replace with 1 where the sum is 0 to avoid division by 0
@@ -414,15 +424,18 @@ class AMAP:
         :return:
         """
         if self.dim_reduction_algo == 't-sne':
-            dim_reduction_algo_inst = TSNE()
+            dim_reduction_algo_inst = TSNE(random_state=self.random_state)
         elif self.dim_reduction_algo == 'umap':
-            dim_reduction_algo_inst = umap.UMAP(n_components=self.n_components, min_dist=1)
+            dim_reduction_algo_inst = umap.UMAP(n_components=self.n_components, min_dist=self.umap_min_dist,
+                                                n_neighbors=self.umap_n_neighbors,
+                                                random_state=self.random_state)
         elif self.dim_reduction_algo == 'mds':
-            dim_reduction_algo_inst = MDS(n_components=self.n_components)
+            dim_reduction_algo_inst = MDS(n_components=self.n_components, random_state=self.random_state)
         elif self.dim_reduction_algo == 'pca':
-            dim_reduction_algo_inst = PCA(n_components=self.n_components)
+            dim_reduction_algo_inst = PCA(n_components=self.n_components, random_state=self.random_state)
         elif self.dim_reduction_algo == 'lda':
-            dim_reduction_algo_inst = LatentDirichletAllocation(n_components=self.n_components)
+            dim_reduction_algo_inst = LatentDirichletAllocation(n_components=self.n_components,
+                                                                random_state=self.random_state)
         else:
             raise Exception(f'Dimension reduction algorithm {self.dim_reduction_algo} is not supported')
         if self.supervised:
@@ -447,49 +460,122 @@ class AMAP:
         else:
             # generate random points for each anchor in the low dimension within radius
             self.print_verbose(f'Dim Reduction only anchors - generate random points in low dim per {self.uniform_points_per}')
+
+            # get concave hulls per label
+            label_to_contour_df = dict()
+            if self.uniform_points_per == 'label':
+                contours_df = self.anchors_to_contour()
+                for label in contours_df[self.label_col].unique():
+                    points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
+                    label_to_contour_df[label] = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline,
+                                                                       douglas_peucker_tolerance=self.douglas_peucker_tolerance,
+                                                                       smooth_iter=self.smooth_iter)
+
             low_dim_points = [None] * self.X_with_centroids.shape[0]
-            for i in range(self.X_with_centroids.shape[0]):
-                if i in self.anchors_indices:
-                    low_dim_points[i] = self.low_dim_anchors[self.anchors_indices.index(i)]
+            from tqdm import tqdm
+            for i in tqdm(range(self.X_with_centroids.shape[0])):
+                if self.uniform_points_per == 'label':
+                    concave_hulls = label_to_contour_df[self.y_with_centroids[i]]
                 else:
-                    # generate random point
-                    # TODO ORM doesn't support 3d
-                    if self.uniform_points_per == 'anchor':  # uniform points per anchor
-                        anchor_index = self._sample_index_to_anchor(self.y_with_centroids[i], self.clusters[i])
-                        low_dim_points[i] = self.random_points_per_cluster(anchor_index, 1)[0]
-                    elif self.uniform_points_per == 'label':
-                        contours_df = self.anchors_to_contour()
-                        points = contours_df[contours_df[self.label_col] == self.y_with_centroids[i]][[self.x_col, self.y_col]].values
-                        concave_hulls = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline)
-                        polygons = []
-                        minxs = []
-                        minys = []
-                        maxxs = []
-                        maxys = []
-                        for concave_hull in concave_hulls:
-                            # create shapely objects
-                            poly = Polygon(concave_hull)
-                            polygons.append(poly)
-                            # get bounding box of polygon
-                            minx, miny, maxx, maxy = poly.bounds
-                            minxs.append(minx)
-                            minys.append(miny)
-                            maxxs.append(maxx)
-                            maxys.append(maxy)
-                        minx, miny, maxx, maxy = min(minxs), min(minys), max(maxxs), max(maxys)
-                        # generate random points within the bounding box
-                        in_poly = False
-                        while not in_poly:
-                            x_cord = np.random.uniform(low=minx, high=maxx)
-                            y_cord = np.random.uniform(low=miny, high=maxy)
-                            for p in polygons:
-                                if p.contains(Point(x_cord, y_cord)):
-                                    low_dim_points[i] = np.array([x_cord, y_cord])
-                                    in_poly = True
-                                    break
-                    else:
-                        raise Exception(f'Unsupported uniform_points_per: {self.uniform_points_per}')
-            self.low_dim_points = np.asarray(low_dim_points)
+                    concave_hulls = None
+                self.random_point_low_dim(i, low_dim_points, concave_hulls)
+            self.low_dim_points = np.array(low_dim_points)
+
+    def random_point_low_dim(self,
+                             i,
+                             low_dim_points,
+                             concave_hulls):
+        anchor_index = self._sample_index_to_anchor(self.y_with_centroids[i], self.clusters[i])
+        if i in self.anchors_indices:
+            low_dim_points[i] = self.low_dim_anchors[self.anchors_indices.index(i)]
+        else:
+            # generate random point
+            # TODO ORM doesn't support 3d
+            if self.uniform_points_per == 'anchor':  # uniform points per anchor
+                low_dim_points[i] = self.random_points_per_cluster(anchor_index, 1)[0]
+            elif self.uniform_points_per == 'label':
+                polygons = []
+                areas = []
+                minxs = []
+                minys = []
+                maxxs = []
+                maxys = []
+                for concave_hull in concave_hulls:
+                    # create shapely objects
+                    poly = Polygon(concave_hull)
+                    polygons.append(poly)
+                    areas.append(poly.area)
+                    # get bounding box of polygon
+                    minx, miny, maxx, maxy = poly.bounds
+                    minxs.append(minx)
+                    minys.append(miny)
+                    maxxs.append(maxx)
+                    maxys.append(maxy)
+                # choose poly with respect to area
+                poly_i = np.random.choice(len(polygons), 1, p=np.array(areas) / sum(areas))[0]
+                # minx, miny, maxx, maxy = min(minxs), min(minys), max(maxxs), max(maxys)
+                minx, miny, maxx, maxy = minxs[poly_i], minys[poly_i], maxxs[poly_i], maxys[poly_i]
+                # generate random points within the bounding box
+                in_poly = False
+                while not in_poly:
+                    x_cord, y_cord = self.random_points_per_cluster(anchor_index, 1)[0]
+                    # x_cord = np.random.uniform(low=minx, high=maxx)
+                    # y_cord = np.random.uniform(low=miny, high=maxy)
+                    for p in polygons:
+                        if p.contains(Point(x_cord, y_cord)):
+                            low_dim_points[i] = np.array([x_cord, y_cord])
+                            in_poly = True
+                            break
+            else:
+                raise Exception(f'Unsupported uniform_points_per: {self.uniform_points_per}')
+
+    # def random_point_low_dim(self, i, low_dim_points):
+    #     if i in self.anchors_indices:
+    #         low_dim_points[i] = self.low_dim_anchors[self.anchors_indices.index(i)]
+    #     else:
+    #         # generate random point
+    #         # TODO ORM doesn't support 3d
+    #         if self.uniform_points_per == 'anchor':  # uniform points per anchor
+    #             anchor_index = self._sample_index_to_anchor(self.y_with_centroids[i], self.clusters[i])
+    #             low_dim_points[i] = self.random_points_per_cluster(anchor_index, 1)[0]
+    #         elif self.uniform_points_per == 'label':
+    #             contours_df = self.anchors_to_contour()
+    #             points = contours_df[contours_df[self.label_col] == self.y_with_centroids[i]][
+    #                 [self.x_col, self.y_col]].values
+    #             concave_hulls = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline)
+    #             polygons = []
+    #             areas = []
+    #             minxs = []
+    #             minys = []
+    #             maxxs = []
+    #             maxys = []
+    #             for concave_hull in concave_hulls:
+    #                 # create shapely objects
+    #                 poly = Polygon(concave_hull)
+    #                 polygons.append(poly)
+    #                 areas.append(poly.area)
+    #                 # get bounding box of polygon
+    #                 minx, miny, maxx, maxy = poly.bounds
+    #                 minxs.append(minx)
+    #                 minys.append(miny)
+    #                 maxxs.append(maxx)
+    #                 maxys.append(maxy)
+    #             # choose poly with respect to area
+    #             poly_i = np.random.choice(len(polygons), 1, p=np.array(areas) / sum(areas))[0]
+    #             # minx, miny, maxx, maxy = min(minxs), min(minys), max(maxxs), max(maxys)
+    #             minx, miny, maxx, maxy = minxs[poly_i], minys[poly_i], maxxs[poly_i], maxys[poly_i]
+    #             # generate random points within the bounding box
+    #             in_poly = False
+    #             while not in_poly:
+    #                 x_cord = np.random.uniform(low=minx, high=maxx)
+    #                 y_cord = np.random.uniform(low=miny, high=maxy)
+    #                 for p in polygons:
+    #                     if p.contains(Point(x_cord, y_cord)):
+    #                         low_dim_points[i] = np.array([x_cord, y_cord])
+    #                         in_poly = True
+    #                         break
+    #         else:
+    #             raise Exception(f'Unsupported uniform_points_per: {self.uniform_points_per}')
 
     def random_points_per_cluster(self, anchor_index, number_of_random_points=None):
         if number_of_random_points is not None:
@@ -560,6 +646,7 @@ class AMAP:
             magnitude = 1
         if self.learning_rate is not None:
             magnitude = magnitude * self.learning_rate
+        # print(f'update src {src_anchor_index} to target {target_anchor_index} dir {direction} magnitude {magnitude} direction_vec {direction_vec}')
         self.low_dim_points[label_cluster_indices] = self.low_dim_points[label_cluster_indices] + direction * magnitude * direction_vec
         # update also the low dim anchors
         self.low_dim_anchors[src_anchor_index] = self.low_dim_anchors[src_anchor_index] + direction * magnitude * direction_vec
@@ -576,14 +663,16 @@ class AMAP:
             is_first = True
             for j in range(self.batch_size):
                 src_anchor_indices, target_anchor_indices, directions, magnitudes = self.get_top_anchors_to_relax()
+                # print(f'src: {src_anchor_indices[0]} target {target_anchor_indices[0]} dir {directions[0]}'
+                #       f'loss: {self.inter_class_relations[src_anchor_indices[0]][target_anchor_indices[0]] - self.inter_class_relations_low_dim[src_anchor_indices[0]][target_anchor_indices[0]]}')
                 for ra_i in range(len(src_anchor_indices)):
                     self.relax_anchor_cluster(src_anchor_indices[ra_i], target_anchor_indices[ra_i], directions[ra_i],
                                               magnitudes[ra_i])
-
-            if self.is_plotly:
-                self.anchors_plot_plotly(i)
-            else:
-                self.anchors_plot_sns(i, is_first)
+            if self.save_fig and i % self.save_fig_every == 0:   # TODO ORM it will break the gif
+                if self.is_plotly:
+                    self.anchors_plot_plotly(i)
+                else:
+                    self.anchors_plot_sns(i, is_first, is_last=i==(self.n_iter-1))
 
         if self.do_animation:
             gif_path = f'{self.output_dir}/animation.gif'
@@ -591,34 +680,36 @@ class AMAP:
                 for i in range(self.n_iter):
                     for j in range(5):
                         writer.append_data(imageio.imread(f'{self.output_dir}/iter{i}.png'))
-                        import time
-            # optimize(gif_path)
 
-    def anchors_plot_sns(self, i, is_first):
+    def anchors_plot_sns(self, i, is_first, is_last):
         df = pd.DataFrame(data=self.low_dim_points, columns=[self.x_col, self.y_col])
         df[self.label_col] = self.y_with_centroids
         df[self.cluster_col] = self.clusters
         df[self.anchor_col] = False
         df.loc[df.index.isin(self.anchors_indices), self.anchor_col] = True
-        fig = plt.figure(figsize=(50, 25))
+        fig = plt.figure(figsize=(26, 13))  # TODO ORM arg
 
         # low dim plot
         shape = (4, 8)
-        df[self.label_col] = df[self.label_col].transform(lambda x: f'label_{x}')
+        if self.class_to_label:
+            df[self.label_col] = df[self.label_col].transform(lambda x: f'{x}_{self.class_to_label[x]}')
+        else:
+            df[self.label_col] = df[self.label_col].transform(lambda x: f'label_{x}')
 
-        self.points_anchors_patches_plot(shape, fig, df, i, is_first)
+        self.points_anchors_patches_plot(shape, fig, df, i, is_first, is_last)
 
         # loss
-        self.loss_plot(shape, fig)
+        self.loss_plot(shape, fig, is_last)
 
         # loss squared diff heatmap plot
-        self.loss_heatmap_plot(shape, fig)
+        self.loss_heatmap_plot(shape, fig, is_last)
 
-        # low dim relation
-        self.low_dim_relations_plot(shape, fig)
+        if self.show_relations:
+            # low dim relation
+            self.low_dim_relations_plot(shape, fig, is_last)
 
-        # high dim relations
-        self.high_dim_relations_plot(shape, fig)
+            # high dim relations
+            self.high_dim_relations_plot(shape, fig, is_last)
 
         fig.suptitle(f'{self.dim_reduction_algo}_{self.anchors_method}')
         if self.save_fig:
@@ -627,121 +718,132 @@ class AMAP:
             plt.show()
         plt.close()
 
-    def high_dim_relations_plot(self, shape, fig):
+    def high_dim_relations_plot(self, shape, fig, is_last):
         ax = plt.subplot2grid(shape, (2, 6), colspan=2, rowspan=2)
         sns.heatmap(self.inter_class_relations, ax=ax, annot=False, square=True, cmap='Blues',
-                    vmin=0, vmax=1,
+                    vmin=0, vmax=1, center=0.5,
                     xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])],
                     yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])])
         ax.set_title('High-Dim Relations')
 
-        if self.save_fig:
+        if self.save_fig and is_last:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/high_dim_relations_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
 
-    def low_dim_relations_plot(self, shape, fig):
+    def low_dim_relations_plot(self, shape, fig, is_last):
         ax = plt.subplot2grid(shape, (0, 6), colspan=2, rowspan=2)
         sns.heatmap(self.inter_class_relations_low_dim, ax=ax, annot=False, square=True, cmap='Blues',
-                    vmin=0, vmax=1,
+                    vmin=0, vmax=1, center=0.5,
                     xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])],
                     yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])])
         ax.set_title('Low-Dim Relations')
 
-        if self.save_fig:
+        if self.save_fig and is_last:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/low_dim_relations_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
 
-    def loss_plot(self, shape, fig):
+    def loss_plot(self, shape, fig, is_last):
         ax = plt.subplot2grid(shape, (0, 0), colspan=2, rowspan=2)
         sns.lineplot(x=list(range(len(self.losses))), y=self.losses, ax=ax)
         ax.set_xlim((0, self.n_iter + 3))
-        ax.set_ylim((-0.1, 6.1))
+        ax.set_ylim((-0.9, 1.1))
         ax.set_title('Loss')
 
-        if self.save_fig:
+        if self.save_fig and is_last:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/loss_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
 
-    def loss_heatmap_plot(self, shape, fig):
+    def loss_heatmap_plot(self, shape, fig, is_last):
         # Squared Diff Relations
         ax = plt.subplot2grid(shape, (2, 0), colspan=2, rowspan=2)
         a_min = 0
-        a_max = 0.5
+        a_max = 0.1
         sns.heatmap(np.clip(np.square(self.inter_class_relations - self.inter_class_relations_low_dim), a_min=a_min,
                             a_max=a_max),
                     ax=ax, annot=False, square=True, cmap='Blues',
-                    vmin=a_min, vmax=a_max,
+                    vmin=a_min, vmax=a_max, center=(a_max-a_min)/2,
                     xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])],
                     yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])])
         ax.set_title('Squared Diff Relations')
 
-        if self.save_fig:
+        if self.save_fig and is_last:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/loss_heatmap_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
 
-    def points_anchors_patches_plot(self, shape, fig, df, i, is_first):
-        ax = plt.subplot2grid(shape, (0, 2), colspan=4, rowspan=4)
-        filled_markers = ('o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X',
-                          'o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X')
+    def points_anchors_patches_plot(self, shape, fig, df, i, is_first, is_last):
+        if self.show_relations:
+            ax = plt.subplot2grid(shape, (0, 2), colspan=4, rowspan=4)
+        else:
+            ax = plt.subplot2grid(shape, (0, 2), colspan=6, rowspan=4)
+        filled_markers = tuple(['o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X']*100)
+        hue_order = sorted(df[self.label_col].unique())
         # Plot points
-        sns.scatterplot(data=df[df['anchor'] == False], x=self.x_col, y=self.y_col, hue=self.label_col,
-                        style=self.cluster_col, ax=ax,
-                        alpha=0.2, legend=False, markers=filled_markers)
+        if self.show_points:
+            sns.scatterplot(data=df[df['anchor'] == False], x=self.x_col, y=self.y_col, hue=self.label_col,
+                            style=self.cluster_col, ax=ax,
+                            alpha=0.2 if self.show_polygons else 1, legend=False, markers=filled_markers,
+                            hue_order=hue_order)
         # Plot anchors
-        sns.scatterplot(data=df[df['anchor'] == True], x=self.x_col, y=self.y_col, hue=self.label_col,
-                        style=self.cluster_col, ax=ax,
-                        alpha=1, markers=filled_markers)
+        if self.show_anchors:
+            sns.scatterplot(data=df[df['anchor'] == True], x=self.x_col, y=self.y_col, hue=self.label_col,
+                            style=self.cluster_col, ax=ax,
+                            alpha=1, markers=filled_markers,
+                            hue_order=hue_order,
+                            size=self.anchors_density)
         # For each anchor, we add a text above the anchor
-        for j, anchor_i in enumerate(self.anchors_indices):
-            ax.text(self.low_dim_points[anchor_i][0], self.low_dim_points[anchor_i][1],
-                    f'{str(self.anchor_to_label_cluster(j, visualization=True))}',
-                    horizontalalignment='center', size='medium',
-                    color='black', weight='semibold')
+        # TODO ORM arg
+        # for j, anchor_i in enumerate(self.anchors_indices):
+        #     ax.text(self.low_dim_points[anchor_i][0], self.low_dim_points[anchor_i][1],
+        #             f'{str(self.anchor_to_label_cluster(j, visualization=True))}',
+        #             horizontalalignment='center', size='medium',
+        #             color='black', weight='semibold')
         ax.set_title(f'iter{i}')
         if is_first:
             xlim = (self.low_dim_points[:, 0].min() - 0.1, self.low_dim_points[:, 0].max() + 0.1)
             ylim = (self.low_dim_points[:, 1].min() - 0.1, self.low_dim_points[:, 1].max() + 0.1)
+
         # Add patches
-        contours_df = self.anchors_to_contour()
-        import itertools
-        palette = itertools.cycle(sns.color_palette())
-        for label in sorted(contours_df[self.label_col].unique()):
-            points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
-            concave_hulls = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline)
-            c = next(palette)
-            c_darker = c[0], 1 - 1.6 * (1 - c[1]), c[2]
-            for concave_hull in concave_hulls:
-                coords = concave_hull
-                line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(coords) - 2) + [Path.CLOSEPOLY]
-                path = Path(coords, line_cmde)
-                patch = patches.PathPatch(path, facecolor=c, alpha=0.5, linewidth=5, edgecolor=c_darker)
-                ax.add_patch(patch)
+        if self.show_polygons:
+            contours_df = self.anchors_to_contour()
+            import itertools
+            palette = itertools.cycle(sns.color_palette())
+            for label in sorted(contours_df[self.label_col].unique()):
+                points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
+                concave_hulls = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline, vis=True,
+                                                      douglas_peucker_tolerance=self.douglas_peucker_tolerance,
+                                                      smooth_iter=self.smooth_iter)
+                c = next(palette)
+                c_darker = c[0], 1 - 1.6 * (1 - c[1]) if 1 - 1.6 * (1 - c[1]) >= 0 else 0, c[2]
+                for concave_hull in concave_hulls:
+                    coords = concave_hull
+                    line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(coords) - 2) + [Path.CLOSEPOLY]
+                    path = Path(coords, line_cmde)
+                    # patch = patches.PathPatch(path, facecolor=c, alpha=0.5, linewidth=10, edgecolor=c_darker)
+                    # ax.add_patch(patch)
+                    # TODO ORM adding contour in solid color
+                    patch = patches.PathPatch(path, facecolor=c, alpha=0.2, linewidth=None, edgecolor=None)
+                    ax.add_patch(patch)
+                    patch = patches.PathPatch(path, facecolor=None, linewidth=10, edgecolor=c, fill=False)
+                    ax.add_patch(patch)
+        # Modify legend
+        if self.show_polygons:
+            num_labels = contours_df[self.label_col].nunique()
+            current_handles, current_labels = plt.gca().get_legend_handles_labels()
+            plt.legend(current_handles[:num_labels + 1], current_labels[:num_labels + 1])
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
-        # Modify legend
-        num_labels = contours_df[self.label_col].nunique()
-        current_handles, current_labels = plt.gca().get_legend_handles_labels()
-        plt.legend(current_handles[:num_labels + 1], current_labels[:num_labels + 1])
 
-        if self.save_fig:
+        if self.save_fig and is_last:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/points_anchors_patches_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
@@ -754,18 +856,18 @@ class AMAP:
 
     def anchors_to_contour(self):
         x_plus_arr = self.low_dim_anchors.copy()
-        x_plus_arr[:, 0] = self.low_dim_anchors[:, 0] + self.anchors_radius
+        x_plus_arr[:, 0] = self.low_dim_anchors[:, 0] + (self.anchors_radius if self.radius_q is not None else 0.01)
         x_minus_arr = self.low_dim_anchors.copy()
-        x_minus_arr[:, 0] = self.low_dim_anchors[:, 0] - self.anchors_radius
+        x_minus_arr[:, 0] = self.low_dim_anchors[:, 0] - (self.anchors_radius if self.radius_q is not None else 0.01)
         y_plus_arr = self.low_dim_anchors.copy()
-        y_plus_arr[:, 1] = self.low_dim_anchors[:, 1] + self.anchors_radius
+        y_plus_arr[:, 1] = self.low_dim_anchors[:, 1] + (self.anchors_radius if self.radius_q is not None else 0.01)
         y_minus_arr = self.low_dim_anchors.copy()
-        y_minus_arr[:, 1] = self.low_dim_anchors[:, 1] - self.anchors_radius
+        y_minus_arr[:, 1] = self.low_dim_anchors[:, 1] - (self.anchors_radius if self.radius_q is not None else 0.01)
         if self.n_components > 2:
             z_plus_arr = self.low_dim_anchors.copy()
-            z_plus_arr[:, 2] = self.low_dim_anchors[:, 2] + self.anchors_radius
+            z_plus_arr[:, 2] = self.low_dim_anchors[:, 2] + (self.anchors_radius if self.radius_q is not None else 0.01)
             z_minus_arr = self.low_dim_anchors.copy()
-            z_minus_arr[:, 2] = self.low_dim_anchors[:, 2] - self.anchors_radius
+            z_minus_arr[:, 2] = self.low_dim_anchors[:, 2] - (self.anchors_radius if self.radius_q is not None else 0.01)
         anchors_radius = np.concatenate([x_plus_arr, x_minus_arr, y_plus_arr, y_minus_arr])
         if self.n_components > 2:
             anchors_radius = np.concatenate([anchors_radius, z_plus_arr, z_minus_arr])
@@ -777,6 +879,13 @@ class AMAP:
         anchors_df = pd.DataFrame(anchors_radius, columns=[self.x_col, self.y_col, 'z'] if self.n_components > 2 else [self.x_col, self.y_col])
         anchors_df[self.label_col] = labels
         return anchors_df
+
+    @staticmethod
+    def smooth_poly_Douglas_Peucker(poly, douglas_peucker_tolerance):
+        _poly = Polygon(poly)
+        _poly = _poly.simplify(douglas_peucker_tolerance, preserve_topology=True)
+        x, y = _poly.exterior.coords.xy
+        return list(zip(x, y))
 
     @staticmethod
     def smooth_poly_Chaikins_corner_cutting_iter(poly, iter=1):
@@ -816,7 +925,7 @@ class AMAP:
         return new_poly
 
     @staticmethod
-    def get_concave_hull(points, alpha, spline=False):
+    def get_concave_hull(points, alpha, spline=False, vis=False, douglas_peucker_tolerance=0.6, smooth_iter=13):
         alpha_shape = alphashape.alphashape(points.tolist(), alpha)
         smooth_shapes = []
         if isinstance(alpha_shape, shapely.geometry.polygon.Polygon):
@@ -826,7 +935,15 @@ class AMAP:
         for shape in list(alpha_shape):
             x, y = shape.exterior.coords.xy
             if not spline:
-                smooth_shape = np.array(AMAP.smooth_poly_Chaikins_corner_cutting_iter(list(zip(x, y)), 3))
+                # TODO ORM one more arg
+                # smooth_shape = np.array(AMAP.smooth_poly_Chaikins_corner_cutting_iter(list(zip(x, y)), 3))
+                # smooth_shape = np.array(AMAP.smooth_poly_Douglas_Peucker(list(zip(x, y))))
+                if vis:
+                    smooth_shape = np.array(AMAP.smooth_poly_Chaikins_corner_cutting_iter(
+                                        AMAP.smooth_poly_Douglas_Peucker(list(zip(x, y)), douglas_peucker_tolerance),
+                        iter=smooth_iter))
+                else:
+                    smooth_shape = np.array(list(zip(x, y)))
             else:
                 tck, u = splprep([np.array(x), np.array(y)], s=3)
                 new_points = splev(u, tck)
@@ -863,21 +980,23 @@ class AMAP:
 
         for label in sorted(anchors_agg_df_[self.label_col].unique()):
             points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
-            concave_hulls = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline)
+            concave_hulls = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline, vis=True,
+                                                  douglas_peucker_tolerance=self.douglas_peucker_tolerance,
+                                                  smooth_iter=self.smooth_iter)
 
             anchors_tmp = anchors_agg_df_[anchors_agg_df_[self.label_col] == label][[self.x_col, self.y_col]].values
             c = next(color)
             fig.add_trace(go.Scatter(x=anchors_tmp[:, 0], y=anchors_tmp[:, 1],
                                      mode='markers',
                                      marker_color=c,
-                                     name=f'digit_{label}'),
+                                     name=f'{label}_{self.class_to_label[label]}' if self.class_to_label else f'label_{label}'),
                           row=2, col=1)
             for concave_hull in concave_hulls:
                 fig.add_trace(go.Scatter(x=concave_hull[:, 0],
                                          y=concave_hull[:, 1],
                                          fill='toself',
                                          marker_color=c,
-                                         name=f'digit_{label}'),
+                                         name=f'{label}_{self.class_to_label[label]}' if self.class_to_label else f'label_{label}'),
                               row=2, col=1)
         fig.update_layout(height=700)
         if self.save_fig:
