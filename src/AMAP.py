@@ -19,8 +19,9 @@ from sklearn.cluster import AgglomerativeClustering, KMeans, MeanShift, estimate
 from sklearn.neighbors import kneighbors_graph
 from scipy.interpolate import splprep, splev
 from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
-from pygifsicle import optimize
+from shapely.geometry import Point, Polygon, MultiPolygon
+from scipy.spatial import Voronoi
+from sklearn.metrics import pairwise_distances
 
 # Global Configurations
 sns.set_style("darkgrid")
@@ -41,7 +42,7 @@ class AMAP:
                  do_animation=True, use_spline: bool = False, alpha: float = 1, douglas_peucker_tolerance: float = 0.6,
                  smooth_iter: int = 13,
                  show_relations: bool = False, save_fig_every: int = 1, show_anchors: bool = False,
-                 show_points: bool = False, show_polygons: bool = True):
+                 show_points: bool = False, show_polygons: bool = True, show_inner_blobs: bool = False):
         """
         :param n_components:
         :param anchors_method:
@@ -150,6 +151,7 @@ class AMAP:
         self.show_points = show_points
         self.show_anchors = show_anchors
         self.show_polygons = show_polygons
+        self.show_inner_blobs = show_inner_blobs
 
         # create output dir
         now = datetime.now()
@@ -175,9 +177,12 @@ class AMAP:
         self.knng = None
         self.inter_class_relations = None
         self.inter_class_relations_low_dim = None
+        self.inter_class_relations_label_level = None
+        self.inter_class_relations_low_dim_label_level = None
         self.anchors_density = None
         self.anchors_radius = None
         self.losses = []  # for visualization
+        self.anchor_voronoi_regions = []  # TODO ORM constructor
 
         # assistance variable
         self.label_col = 'label'
@@ -242,6 +247,8 @@ class AMAP:
         # Calculate inter class relations
         if self.do_relaxation:
             self._calc_inter_class_relations()
+            self.calc_proximity_matrix('high')
+
         # Dim Reduction
         self._dim_reduction()
         # DO relaxation in the low dimension
@@ -355,6 +362,50 @@ class AMAP:
         else:
             return len(self.num_clusters_each_label)-1, anchor_index - anchors_count
 
+    def calc_proximity_matrix(self, dim):
+        """
+
+        :param X:
+        :return:
+        """
+        if dim == 'high':
+            anchors = self.intra_class_anchors
+        else:
+            anchors = self.low_dim_anchors
+        num_labels = len(np.unique(self.intra_class_anchors_labels))
+        proximity_matrix = np.zeros((num_labels, num_labels))  # TODO ORM constructor
+
+        # dist matrix on anchors
+        dist_mat = pairwise_distances(anchors)
+        # take to inf anchors from same label
+        for i in range(dist_mat.shape[0]):
+            for j in range(dist_mat.shape[1]):
+                if self.intra_class_anchors_labels[i] == self.intra_class_anchors_labels[j]:
+                    dist_mat[i][j] = np.inf
+        # for each anchor find 3 closest anchors from other labels
+        k = 3  # TODO ORM constructor
+        edges = np.argpartition(dist_mat, kth=k, axis=1)[:, :k]
+
+        for i in range(edges.shape[0]):
+            for j in range(edges.shape[1]):
+                anchor_i = i
+                anchor_j = edges[i][j]
+                if dist_mat[anchor_i][anchor_j] < np.inf:
+                    label_i = self.intra_class_anchors_labels[anchor_i]
+                    label_j = self.intra_class_anchors_labels[anchor_j]
+                    proximity_matrix[label_i][label_j] += 1
+
+        # Normalize for each anchor
+        sum_row = proximity_matrix.sum(axis=1, keepdims=True)
+        # replace with 1 where the sum is 0 to avoid division by 0
+        sum_row[sum_row == 0] = 1
+        proximity_matrix = proximity_matrix / sum_row
+
+        if dim == 'high':
+            self.high_dim_proximity_matrix = proximity_matrix
+        else:
+            self.low_dim_proximity_matrix = proximity_matrix
+
     def _calc_inter_class_relations(self):
         """
 
@@ -362,12 +413,15 @@ class AMAP:
         :return:
         """
         self.inter_class_relations = np.zeros((len(self.intra_class_anchors_labels), len(self.intra_class_anchors_labels)))
+        num_labels = len(np.unique(self.intra_class_anchors_labels))
+        self.inter_class_relations_label_level = np.zeros((num_labels, num_labels))
         edges_x1, edges_x2 = self.knng.nonzero()
         # Initialize inter class anchors
         for x1, x2 in zip(edges_x1, edges_x2):
             anchor_x1 = self._sample_index_to_anchor(self.y_with_centroids[x1], self.clusters[x1])
             anchor_x2 = self._sample_index_to_anchor(self.y_with_centroids[x2], self.clusters[x2])
             self.inter_class_relations[anchor_x1][anchor_x2] += 1
+            self.inter_class_relations_label_level[self.y_with_centroids[x1]][self.y_with_centroids[x2]] += 1
         if not self.self_relation:
             np.fill_diagonal(self.inter_class_relations, 0)
 
@@ -380,11 +434,21 @@ class AMAP:
                     if label_i == label_j:
                         self.inter_class_relations[i][j] = 0
 
+        # # fill label level matrix
+        # for i in range(self.inter_class_relations.shape[0]):
+        #     for j in range(self.inter_class_relations.shape[1]):
+        #         label_i, _ = self.anchor_to_label_cluster(i)
+        #         label_j, _ = self.anchor_to_label_cluster(j)
+        #         self.inter_class_relations_label_level[label_i][label_j] += self.inter_class_relations[i][j]
+
         # Normalize for each anchor
         sum_row = self.inter_class_relations.sum(axis=1, keepdims=True)
+        sum_row_label_level = self.inter_class_relations_label_level.sum(axis=1, keepdims=True)
         # replace with 1 where the sum is 0 to avoid division by 0
         sum_row[sum_row == 0] = 1
+        sum_row_label_level[sum_row_label_level == 0] = 1
         self.inter_class_relations = self.inter_class_relations / sum_row
+        self.inter_class_relations_label_level = self.inter_class_relations_label_level / sum_row_label_level
 
     def calc_low_dim_inter_class_relations(self):
         """
@@ -393,12 +457,15 @@ class AMAP:
         """
         knng = kneighbors_graph(self.low_dim_points, self.k, mode='distance', n_jobs=self.n_jobs)
         self.inter_class_relations_low_dim = np.zeros((len(self.intra_class_anchors_labels), len(self.intra_class_anchors_labels)))
+        num_labels = len(np.unique(self.intra_class_anchors_labels))
+        self.inter_class_relations_low_dim_label_level = np.zeros((num_labels, num_labels))
         edges_x1, edges_x2 = knng.nonzero()
         # Initialize inter class anchors
         for x1, x2 in zip(edges_x1, edges_x2):
             anchor_x1 = self._sample_index_to_anchor(self.y_with_centroids[x1], self.clusters[x1])
             anchor_x2 = self._sample_index_to_anchor(self.y_with_centroids[x2], self.clusters[x2])
             self.inter_class_relations_low_dim[anchor_x1][anchor_x2] += 1
+            self.inter_class_relations_low_dim_label_level[self.y_with_centroids[x1]][self.y_with_centroids[x2]] += 1
         if not self.self_relation:
             np.fill_diagonal(self.inter_class_relations_low_dim, 0)
 
@@ -411,11 +478,21 @@ class AMAP:
                     if label_i == label_j:
                         self.inter_class_relations_low_dim[i][j] = 0
 
+        # # fill label level matrix
+        # for i in range(self.inter_class_relations.shape[0]):
+        #     for j in range(self.inter_class_relations.shape[1]):
+        #         label_i, _ = self.anchor_to_label_cluster(i)
+        #         label_j, _ = self.anchor_to_label_cluster(j)
+        #         self.inter_class_relations_label_level[label_i][label_j] += self.inter_class_relations[i][j]
+
         # Normalize for each anchor
         sum_row = self.inter_class_relations_low_dim.sum(axis=1, keepdims=True)
+        sum_row_label_level = self.inter_class_relations_low_dim_label_level.sum(axis=1, keepdims=True)
         # replace with 1 where the sum is 0 to avoid division by 0
         sum_row[sum_row == 0] = 1
+        sum_row_label_level[sum_row_label_level == 0] = 1
         self.inter_class_relations_low_dim = self.inter_class_relations_low_dim / sum_row
+        self.inter_class_relations_low_dim_label_level = self.inter_class_relations_low_dim_label_level / sum_row_label_level
 
     def _dim_reduction(self):
         """
@@ -461,15 +538,70 @@ class AMAP:
             # generate random points for each anchor in the low dimension within radius
             self.print_verbose(f'Dim Reduction only anchors - generate random points in low dim per {self.uniform_points_per}')
 
-            # get concave hulls per label
+            # TODO ORM comment out to test support of voronoi
+            # # get concave hulls per label
+            # label_to_contour_df = dict()
+            # if self.uniform_points_per == 'label':
+            #     contours_df = self.anchors_to_contour()
+            #     for label in contours_df[self.label_col].unique():
+            #         points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
+            #         label_to_contour_df[label] = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline,
+            #                                                            douglas_peucker_tolerance=self.douglas_peucker_tolerance,
+            #                                                            smooth_iter=self.smooth_iter)
+
+
+
+            # TODO ORM support voronoi?
             label_to_contour_df = dict()
-            if self.uniform_points_per == 'label':
-                contours_df = self.anchors_to_contour()
-                for label in contours_df[self.label_col].unique():
-                    points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
-                    label_to_contour_df[label] = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline,
-                                                                       douglas_peucker_tolerance=self.douglas_peucker_tolerance,
-                                                                       smooth_iter=self.smooth_iter)
+            contours_df = self.anchors_to_contour()
+            for label in sorted(contours_df[self.label_col].unique()):
+                points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
+                label_to_contour_df[label] = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline,
+                                                                   douglas_peucker_tolerance=self.douglas_peucker_tolerance,
+                                                                   smooth_iter=self.smooth_iter)
+                if len(label_to_contour_df[label]) > 1:
+                    polygon = MultiPolygon([Polygon(p) for p in label_to_contour_df[label]])
+                else:
+                    polygon = Polygon(label_to_contour_df[label][0])
+                points = []
+                for anchor, anchor_label in zip(self.low_dim_anchors, self.intra_class_anchors_labels):
+                    if anchor_label != label:
+                        continue
+                    p = Point(anchor)
+                    if polygon.contains(p):
+                        points.append(anchor)
+                # handle regions with one or two points
+                if len(points) < 3:
+                    for i in range(len(points)):
+                        point = points[i]
+                        points.append([point[0] + 0.01, point[1]])
+                        points.append([point[0] - 0.01, point[1]])
+                        points.append([point[0], point[1] + 0.01])
+                        points.append([point[0], point[1] - 0.01])
+                points = np.array(points)
+
+                vor = Voronoi(points)
+
+                regions, vertices = AMAP.voronoi_finite_polygons_2d(vor)
+
+                #     pts = MultiPoint([Point(i) for i in points])
+                #     mask = pts.convex_hull
+                mask = polygon
+                new_vertices = []
+                for region in regions:
+                    polygon = vertices[region]
+                    shape = list(polygon.shape)
+                    shape[0] += 1
+                    p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
+                    self.anchor_voronoi_regions.append(p)
+                    # TODO ORM plot debug comment out
+                    poly = np.array(list(zip(p.boundary.coords.xy[0][:-1], p.boundary.coords.xy[1][:-1])))
+                    new_vertices.append(poly)
+                    plt.fill(*zip(*poly), alpha=0.4)
+                plt.plot(points[:, 0], points[:, 1], 'ko')
+            plt.title("Clipped Voronois")
+            plt.show()
+
 
             low_dim_points = [None] * self.X_with_centroids.shape[0]
             from tqdm import tqdm
@@ -480,6 +612,90 @@ class AMAP:
                     concave_hulls = None
                 self.random_point_low_dim(i, low_dim_points, concave_hulls)
             self.low_dim_points = np.array(low_dim_points)
+
+    @staticmethod
+    def voronoi_finite_polygons_2d(vor, radius=None):
+        """
+        Reconstruct infinite voronoi regions in a 2D diagram to finite
+        regions.
+
+        Parameters
+        ----------
+        vor : Voronoi
+            Input diagram
+        radius : float, optional
+            Distance to 'points at infinity'.
+
+        Returns
+        -------
+        regions : list of tuples
+            Indices of vertices in each revised Voronoi regions.
+        vertices : list of tuples
+            Coordinates for revised Voronoi vertices. Same as coordinates
+            of input vertices, with 'points at infinity' appended to the
+            end.
+
+        """
+
+        if vor.points.shape[1] != 2:
+            raise ValueError("Requires 2D input")
+
+        new_regions = []
+        new_vertices = vor.vertices.tolist()
+
+        center = vor.points.mean(axis=0)
+        if radius is None:
+            radius = vor.points.ptp().max()
+
+        # Construct a map containing all ridges for a given point
+        all_ridges = {}
+        for (p1, p2), (v1, v2) in zip(vor.ridge_points, vor.ridge_vertices):
+            all_ridges.setdefault(p1, []).append((p2, v1, v2))
+            all_ridges.setdefault(p2, []).append((p1, v1, v2))
+
+        # Reconstruct infinite regions
+        for p1, region in enumerate(vor.point_region):
+            vertices = vor.regions[region]
+
+            if all(v >= 0 for v in vertices):
+                # finite region
+                new_regions.append(vertices)
+                continue
+
+            # reconstruct a non-finite region
+            ridges = all_ridges[p1]
+            new_region = [v for v in vertices if v >= 0]
+
+            for p2, v1, v2 in ridges:
+                if v2 < 0:
+                    v1, v2 = v2, v1
+                if v1 >= 0:
+                    # finite ridge: already in the region
+                    continue
+
+                # Compute the missing endpoint of an infinite ridge
+
+                t = vor.points[p2] - vor.points[p1]  # tangent
+                t /= np.linalg.norm(t)
+                n = np.array([-t[1], t[0]])  # normal
+
+                midpoint = vor.points[[p1, p2]].mean(axis=0)
+                direction = np.sign(np.dot(midpoint - center, n)) * n
+                far_point = vor.vertices[v2] + direction * radius
+
+                new_region.append(len(new_vertices))
+                new_vertices.append(far_point.tolist())
+
+            # sort region counterclockwise
+            vs = np.asarray([new_vertices[v] for v in new_region])
+            c = vs.mean(axis=0)
+            angles = np.arctan2(vs[:, 1] - c[1], vs[:, 0] - c[0])
+            new_region = np.array(new_region)[np.argsort(angles)]
+
+            # finish
+            new_regions.append(new_region.tolist())
+
+        return new_regions, np.asarray(new_vertices)
 
     def random_point_low_dim(self,
                              i,
@@ -580,30 +796,41 @@ class AMAP:
     def random_points_per_cluster(self, anchor_index, number_of_random_points=None):
         if number_of_random_points is not None:
             number_of_random_points = self.anchors_density[anchor_index]
-        if self.random_points_in_box:
-            random_points = np.zeros((number_of_random_points, self.n_components))
-            minx = self.low_dim_anchors[anchor_index][0] - self.anchors_radius[anchor_index]
-            maxx = self.low_dim_anchors[anchor_index][0] + self.anchors_radius[anchor_index]
-            miny = self.low_dim_anchors[anchor_index][1] - self.anchors_radius[anchor_index]
-            maxy = self.low_dim_anchors[anchor_index][1] + self.anchors_radius[anchor_index]
-            if self.n_components > 2:
-                minz = self.low_dim_anchors[anchor_index][2] - self.anchors_radius[anchor_index]
-                maxz = self.low_dim_anchors[anchor_index][2] + self.anchors_radius[anchor_index]
-            for i in range(number_of_random_points):
-                random_points[i][0] = np.random.uniform(low=minx, high=maxx)
-                random_points[i][1] = np.random.uniform(low=miny, high=maxy)
-                if self.n_components > 2:
-                    random_points[i][2] = np.random.uniform(low=minz, high=maxz)
-        else:
-            # generate the points
-            # TODO ORM not supporting 3d
-            radius = self.anchors_radius[anchor_index]
-            theta = np.random.rand(number_of_random_points) * (2 * np.pi)
-            r = radius * np.sqrt(np.random.rand(number_of_random_points))
-            x, y = r * np.cos(theta), r * np.sin(theta)
-            x = x + self.low_dim_anchors[anchor_index][0]
-            y = y + self.low_dim_anchors[anchor_index][1]
-            random_points = np.array(list(zip(x, y)))
+        # TODO ORM random points in voronoi region
+        _poly = self.anchor_voronoi_regions[anchor_index]
+        minx, miny, maxx, maxy = _poly.bounds
+        # generate random points within the bounding box
+        random_points = []
+        while len(random_points) < number_of_random_points:
+            x = np.random.uniform(low=minx, high=maxx)
+            y = np.random.uniform(low=miny, high=maxy)
+            if _poly.contains(Point(x, y)):
+                random_points.append([x, y])
+        # TODO ORM comment out to test random points in voronoi region
+        # if self.random_points_in_box:
+        #     random_points = np.zeros((number_of_random_points, self.n_components))
+        #     minx = self.low_dim_anchors[anchor_index][0] - self.anchors_radius[anchor_index]
+        #     maxx = self.low_dim_anchors[anchor_index][0] + self.anchors_radius[anchor_index]
+        #     miny = self.low_dim_anchors[anchor_index][1] - self.anchors_radius[anchor_index]
+        #     maxy = self.low_dim_anchors[anchor_index][1] + self.anchors_radius[anchor_index]
+        #     if self.n_components > 2:
+        #         minz = self.low_dim_anchors[anchor_index][2] - self.anchors_radius[anchor_index]
+        #         maxz = self.low_dim_anchors[anchor_index][2] + self.anchors_radius[anchor_index]
+        #     for i in range(number_of_random_points):
+        #         random_points[i][0] = np.random.uniform(low=minx, high=maxx)
+        #         random_points[i][1] = np.random.uniform(low=miny, high=maxy)
+        #         if self.n_components > 2:
+        #             random_points[i][2] = np.random.uniform(low=minz, high=maxz)
+        # else:
+        #     # generate the points
+        #     # TODO ORM not supporting 3d
+        #     radius = self.anchors_radius[anchor_index]
+        #     theta = np.random.rand(number_of_random_points) * (2 * np.pi)
+        #     r = radius * np.sqrt(np.random.rand(number_of_random_points))
+        #     x, y = r * np.cos(theta), r * np.sin(theta)
+        #     x = x + self.low_dim_anchors[anchor_index][0]
+        #     y = y + self.low_dim_anchors[anchor_index][1]
+        #     random_points = np.array(list(zip(x, y)))
         return random_points
 
     @staticmethod
@@ -654,6 +881,7 @@ class AMAP:
     def relaxation(self):
         for i in range(self.n_iter):
             self.calc_low_dim_inter_class_relations()
+            self.calc_proximity_matrix('low')
             loss = self.loss_func(self.inter_class_relations, self.inter_class_relations_low_dim)
             if loss < self.stop_criteria:
                 self.print_verbose(f'loss {loss} < stopping criteria {self.stop_criteria} nothing to do')
@@ -702,14 +930,26 @@ class AMAP:
         self.loss_plot(shape, fig, is_last)
 
         # loss squared diff heatmap plot
-        self.loss_heatmap_plot(shape, fig, is_last)
+        self.label_level = True # TODO ORM constructor
+        if self.label_level:
+            self.loss_heatmap_label_level_plot(shape, fig, is_last)
+        else:
+            self.loss_heatmap_plot(shape, fig, is_last)
 
         if self.show_relations:
             # low dim relation
-            self.low_dim_relations_plot(shape, fig, is_last)
+            if self.label_level:
+                # self.low_dim_relations_label_level_plot(shape, fig, is_last)
+                self.proximity_matrix_plot(shape, fig, is_last, 'low')
+            else:
+                self.low_dim_relations_plot(shape, fig, is_last)
 
             # high dim relations
-            self.high_dim_relations_plot(shape, fig, is_last)
+            if self.label_level:
+                # self.high_dim_relations_label_level_plot(shape, fig, is_last)
+                self.proximity_matrix_plot(shape, fig, is_last, 'high')
+            else:
+                self.high_dim_relations_plot(shape, fig, is_last)
 
         fig.suptitle(f'{self.dim_reduction_algo}_{self.anchors_method}')
         if self.save_fig:
@@ -720,33 +960,88 @@ class AMAP:
 
     def high_dim_relations_plot(self, shape, fig, is_last):
         ax = plt.subplot2grid(shape, (2, 6), colspan=2, rowspan=2)
-        sns.heatmap(self.inter_class_relations, ax=ax, annot=False, square=True, cmap='Blues',
+        sns.heatmap(self.inter_class_relations, ax=ax, annot=False, square=True, cmap='YlGnBu',
                     vmin=0, vmax=1, center=0.5,
                     xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])],
                     yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])])
-        ax.set_title('High-Dim Relations')
+        ax.set_title('High-Dim Overlap')
 
         if self.save_fig and is_last:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/high_dim_relations_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+            fig.savefig(f'{self.output_dir}/high_dim_overlap_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
+
+    def high_dim_relations_label_level_plot(self, shape, fig, is_last):
+        ax = plt.subplot2grid(shape, (2, 6), colspan=2, rowspan=2)
+        sns.heatmap(self.inter_class_relations_label_level, ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
+                    vmin=0, vmax=1, center=0.5,
+                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
+                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
+        ax.set_title('High-Dim Label Level Overlap')
+
+        if self.save_fig and is_last:
+            # Save just the portion _inside_ the second axis's boundaries
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(f'{self.output_dir}/high_dim_overlap_label_level_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
 
     def low_dim_relations_plot(self, shape, fig, is_last):
         ax = plt.subplot2grid(shape, (0, 6), colspan=2, rowspan=2)
-        sns.heatmap(self.inter_class_relations_low_dim, ax=ax, annot=False, square=True, cmap='Blues',
+        sns.heatmap(self.inter_class_relations_low_dim, ax=ax, annot=False, square=True, cmap='YlGnBu',
                     vmin=0, vmax=1, center=0.5,
                     xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])],
                     yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])])
-        ax.set_title('Low-Dim Relations')
+        ax.set_title('Low-Dim Overlap')
 
         if self.save_fig and is_last:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/low_dim_relations_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
+
+    def low_dim_relations_label_level_plot(self, shape, fig, is_last):
+        ax = plt.subplot2grid(shape, (0, 6), colspan=2, rowspan=2)
+        sns.heatmap(self.inter_class_relations_low_dim_label_level, ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
+                    vmin=0, vmax=1, center=0.5,
+                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
+                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
+        ax.set_title('Low-Dim Overlap')
+
+        if self.save_fig and is_last:
+            # Save just the portion _inside_ the second axis's boundaries
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(f'{self.output_dir}/low_dim_overlap_label_level_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
+
+    def proximity_matrix_plot(self, shape, fig, is_last, dim):
+        if dim == 'high':
+            ax = plt.subplot2grid(shape, (2, 6), colspan=2, rowspan=2)
+            proximity_matrix = self.high_dim_proximity_matrix
+        else:
+            ax = plt.subplot2grid(shape, (0, 6), colspan=2, rowspan=2)
+            proximity_matrix = self.low_dim_proximity_matrix
+        sns.heatmap(proximity_matrix, ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
+                    vmin=0, vmax=1, center=0.5,
+                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
+                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
+        ax.set_title(f'{dim}-Dim Proximity')
+
+        if self.save_fig and is_last:
+            # Save just the portion _inside_ the second axis's boundaries
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(f'{self.output_dir}/{dim}_dim_proximity_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
+
 
     def loss_plot(self, shape, fig, is_last):
         ax = plt.subplot2grid(shape, (0, 0), colspan=2, rowspan=2)
@@ -759,6 +1054,28 @@ class AMAP:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/loss_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
+
+    def loss_heatmap_label_level_plot(self, shape, fig, is_last):
+        # Squared Diff Relations
+        ax = plt.subplot2grid(shape, (2, 0), colspan=2, rowspan=2)
+        a_min = 0
+        a_max = 1
+        sns.heatmap(np.clip(np.square(self.inter_class_relations_label_level - self.inter_class_relations_low_dim_label_level), a_min=a_min,
+                            a_max=a_max),
+                    ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
+                    vmin=a_min, vmax=a_max, center=(a_max-a_min)/2,
+                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
+                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
+        ax.set_title('Matrix Overlap Diff')
+
+        if self.save_fig and is_last:
+            # Save just the portion _inside_ the second axis's boundaries
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(f'{self.output_dir}/loss_heatmap_label_level_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
 
     def loss_heatmap_plot(self, shape, fig, is_last):
         # Squared Diff Relations
@@ -767,7 +1084,7 @@ class AMAP:
         a_max = 0.1
         sns.heatmap(np.clip(np.square(self.inter_class_relations - self.inter_class_relations_low_dim), a_min=a_min,
                             a_max=a_max),
-                    ax=ax, annot=False, square=True, cmap='Blues',
+                    ax=ax, annot=False, square=True, cmap='YlGnBu',
                     vmin=a_min, vmax=a_max, center=(a_max-a_min)/2,
                     xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
                                  range(self.inter_class_relations.shape[0])],
@@ -779,6 +1096,8 @@ class AMAP:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/loss_heatmap_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
 
     def points_anchors_patches_plot(self, shape, fig, df, i, is_first, is_last):
         if self.show_relations:
@@ -828,13 +1147,31 @@ class AMAP:
                     coords = concave_hull
                     line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(coords) - 2) + [Path.CLOSEPOLY]
                     path = Path(coords, line_cmde)
-                    # patch = patches.PathPatch(path, facecolor=c, alpha=0.5, linewidth=10, edgecolor=c_darker)
-                    # ax.add_patch(patch)
-                    # TODO ORM adding contour in solid color
                     patch = patches.PathPatch(path, facecolor=c, alpha=0.2, linewidth=None, edgecolor=None)
                     ax.add_patch(patch)
                     patch = patches.PathPatch(path, facecolor=None, linewidth=10, edgecolor=c, fill=False)
                     ax.add_patch(patch)
+
+                if self.show_inner_blobs:
+                    # get all points of label in low dim
+                    # for each cluster in the label
+                    for cluster in range(self.num_clusters_each_label[label]):
+                        cluster_low_dim_points = self.low_dim_points[(self.y_with_centroids == label) & (self.clusters == cluster)]
+                        # Skip clusters of one or two point
+                        if len(cluster_low_dim_points) < 3:
+                            continue
+                        # print(cluster_low_dim_points)
+                        # get contour of cluster
+                        concave_hull = self.get_concave_hull(cluster_low_dim_points, alpha=0, spline=False, vis=True,
+                                                             douglas_peucker_tolerance=0, smooth_iter=2)[0]
+                        # plot patch
+                        line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(concave_hull) - 2) + [Path.CLOSEPOLY]
+                        path = Path(concave_hull, line_cmde)
+                        # patch = patches.PathPatch(path, facecolor=c, alpha=0.2, linewidth=None, edgecolor=None)
+                        # ax.add_patch(patch)
+                        patch = patches.PathPatch(path, facecolor=None, linewidth=5, edgecolor=c, fill=False)
+                        ax.add_patch(patch)
+
         # Modify legend
         if self.show_polygons:
             num_labels = contours_df[self.label_col].nunique()
@@ -847,6 +1184,8 @@ class AMAP:
             # Save just the portion _inside_ the second axis's boundaries
             extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(f'{self.output_dir}/points_anchors_patches_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
+        if self.show_fig and is_last:
+            plt.show()
 
     DEFAULT_PLOTLY_COLORS = ['rgb(31, 119, 180)', 'rgb(255, 127, 14)',
                              'rgb(44, 160, 44)', 'rgb(214, 39, 40)',

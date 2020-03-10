@@ -5,6 +5,7 @@ from sklearn.decomposition import PCA
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+import joblib
 
 class DataSet:
     """
@@ -136,6 +137,38 @@ class DataSetFactory:
         return ds
 
     @staticmethod
+    def get_vgg_features_imagenet(random_state, sample):
+        X = joblib.load('../data/ImageNetCropped/vgg_animals_embeddings.pickle')
+        y = joblib.load('../data/ImageNetCropped/vgg_animals_labels.pickle')
+        df = pd.DataFrame(X)
+        feature_cols = [f'Feat{i:03}' for i in range(X.shape[1])]
+        df.columns = feature_cols
+        label_col = 'Label'
+        df[label_col] = y
+
+        ds = DataSet(df=df, feature_cols=feature_cols, label_col=label_col)
+        # Take only sample for now
+        if sample is not None:
+            print(f'Taking sample of {sample} from the data')
+            ds.df = ds.df.sample(frac=sample, random_state=random_state)
+
+        class_names = [
+            'Norwegian_elkhound',   # n02091467
+            'golden_retriever',     # n02099601
+            'Maltese_dog',          # n02085936
+            'Scottish_deerhound',   # n02092002
+            'Bedlington_terrier',   # n02093647
+            'Blenheim_spaniel',     # n02086646
+            'Boston_bull',          # n02096585
+            'toy_terrier',          # n02087046
+            'Rhodesian_ridgeback',  # n02087394
+            'Afghan_hound'          # n02088094
+        ]
+        ds.class_to_label = {i: class_names[i] for i in range(len(class_names))}
+
+        return ds
+
+    @staticmethod
     def get_dataset(dataset_name, random_state=None, sample=None, is_subset=False):
         if random_state is not None:
             np.random.seed(random_state)
@@ -157,5 +190,7 @@ class DataSetFactory:
             return DataSet(df, feature_cols, label_col)
         if dataset_name in ['FashionMNIST', 'FashionMNIST64']:
             return DataSetFactory.fashion_mnist(dataset_name, random_state, sample, is_subset)
+        if dataset_name == 'vgg_features_imagenet':
+            return DataSetFactory.get_vgg_features_imagenet(random_state, sample)
         else:
             raise Exception(f'Unsupported dataset {dataset_name}')
