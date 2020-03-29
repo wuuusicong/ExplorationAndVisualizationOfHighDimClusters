@@ -227,7 +227,7 @@ class AMAP:
         # create output dir
         now = datetime.now()
         date_time = now.strftime("%Y-%d-%m_%H-%M-%S")
-        self.output_dir = f'./plots/{self.dataset}/{date_time}/'
+        self.output_dir = f'../plots/{self.dataset}/{date_time}/'
         if self.save_fig:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)
