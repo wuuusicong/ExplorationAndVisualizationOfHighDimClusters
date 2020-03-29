@@ -338,6 +338,187 @@ class PolygonsFactory:
                     PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
             ]
             return pg.preprocess_polygons(polys)
+        elif polygons_name == 'cross7':
+            pg = PolygonsGenerator(random_points=[3000 ,6000 ,600 ,800 ,1000 ,1200, 1400, 1600])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [-1, 0],
+                    [0, 1],
+                    [1, 0],
+                    [0, -1],
+                    [-1, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (0, 1)},
+
+                {PolygonsGenerator.POLY: [
+                    [-1, 0],
+                    [0, 1],
+                    [1, 0],
+                    [0, -1],
+                    [-1, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (3, 0.7)},
+
+                {PolygonsGenerator.POLY: [
+                    [-1, 0],
+                    [0, 1],
+                    [1, 0],
+                    [0, -1],
+                    [-1, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (-3, 0.7)},
+
+                {PolygonsGenerator.POLY: [
+                    [0.5, 0],
+                    [3, 1],
+                    [6, 0],
+                    [3, -1],
+                    [0.5, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (0, 1)},
+
+                {PolygonsGenerator.POLY: [
+                    [-0.5, 0],
+                    [-3, 1],
+                    [-6, 0],
+                    [-3, -1],
+                    [-0.5, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (0, 1)},
+
+                {PolygonsGenerator.POLY: [
+                    [0, 0.5],
+                    [-1, 3],
+                    [0, 6],
+                    [1, 3],
+                    [0, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (0, 1)},
+
+                {PolygonsGenerator.POLY: [
+                    [0, -0.5],
+                    [-1, -3],
+                    [0, -6],
+                    [1, -3],
+                    [0, -0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (0, 1)},
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == 'cross-denses':
+            pg = PolygonsGenerator(random_points=[200 ,400 ,600 ,800 ,1000 ,1200, 1400, 1600])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [2, 0],
+                    [3, 1],
+                    [4, 2],
+                    [5, 1],
+                    [6, 0],
+                    [5, -1],
+                    [4, -2],
+                    [3, -1],
+                    [2, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (5, 1)},
+
+                {PolygonsGenerator.POLY: [
+                    [2, 0],
+                    [3, 1],
+                    [4, 2],
+                    [5, 1],
+                    [6, 0],
+                    [5, -1],
+                    [4, -2],
+                    [3, -1],
+                    [2, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
+
+                ####################
+                {PolygonsGenerator.POLY: [
+                    [12, 0],
+                    [13, 1],
+                    [14, 2],
+                    [15, 1],
+                    [16, 0],
+                    [15, -1],
+                    [14, -2],
+                    [13, -1],
+                    [12, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
+                ####################
+
+                {PolygonsGenerator.POLY: [
+                    [-2, 0],
+                    [-3, 1],
+                    [-4, 2],
+                    [-5, 1],
+                    [-6, 0],
+                    [-5, -1],
+                    [-4, -2],
+                    [-3, -1],
+                    [-2, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (5, 1)},
+
+                {PolygonsGenerator.POLY: [
+                    [-2, 0],
+                    [-3, 1],
+                    [-4, 2],
+                    [-5, 1],
+                    [-6, 0],
+                    [-5, -1],
+                    [-4, -2],
+                    [-3, -1],
+                    [-2, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
+
+                ######################
+                {PolygonsGenerator.POLY: [
+                    [-12, 0],
+                    [-13, 1],
+                    [-14, 2],
+                    [-15, 1],
+                    [-16, 0],
+                    [-15, -1],
+                    [-14, -2],
+                    [-13, -1],
+                    [-12, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
+                ######################
+
+                {PolygonsGenerator.POLY: [
+                    [0, 5],
+                    [-1, 7],
+                    [-2, 9],
+                    [-1, 11],
+                    [0, 20],
+                    [1, 11],
+                    [2, 9],
+                    [1, 7],
+                    [0, 5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
+
+                {PolygonsGenerator.POLY: [
+                    [0, -5],
+                    [-1, -7],
+                    [-2, -9],
+                    [-1, -11],
+                    [0, -20],
+                    [1, -11],
+                    [2, -9],
+                    [1, -7],
+                    [0, -5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None, PolygonsGenerator.Z_DIST: (-5, 1)},
+            ]
+            return pg.preprocess_polygons(polys)
         elif polygons_name == 'simple_overlap':
             polys = [
                 {PolygonsGenerator.POLY: [
@@ -438,6 +619,107 @@ class PolygonsFactory:
                     PolygonsGenerator.Z_DIST: (0, 0.01)},
             ]
             return pg.preprocess_polygons(polys)
+        elif polygons_name == 'hourglass2':
+            pg1_a = PolygonsGenerator(random_points=300)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [1,2],
+                    [3,4],
+                    [3,0],
+                    [1,2]
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.1)},
+
+                {PolygonsGenerator.POLY: [
+                    [7, 4],
+                    [9, 2],
+                    [7, 0],
+                    [7, 4],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.1)},
+            ]
+
+            df1_a, feature_cols, POLY_COL = pg1_a.preprocess_polygons(polys)
+
+            # ============================================================
+            pg1_b = PolygonsGenerator(random_points=100)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3, 4],
+                    [5, 2.2],
+                    [7, 4],
+                    [7, 0],
+                    [5, 1.8],
+                    [3, 0],
+                    [3, 4],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.1)},
+            ]
+
+            df1_b, _, _ = pg1_b.preprocess_polygons(polys)
+
+            df1 = pd.concat([df1_a, df1_b])
+            df1[POLY_COL] = 0
+            # ============================================================
+            pg2_a = PolygonsGenerator(random_points=200)
+            polys2_a = [
+                {PolygonsGenerator.POLY: [
+                    # [4.8, 2.5],
+                    # [5.2, 2.5],
+                    # [5.2, 1.5],
+                    # [4.8, 1.5],
+                    # [4.8, 2.5],
+                    [4.8, 3],
+                    [5.2, 3],
+                    [5.2, 1],
+                    [4.8, 1],
+                    [4.8, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.01)},
+            ]
+
+            df2_a, _, _ = pg2_a.preprocess_polygons(polys2_a)
+
+            # ============================================================
+            pg2_b = PolygonsGenerator(random_points=20)
+            polys2_b = [
+                {PolygonsGenerator.POLY: [
+                    [4.8, 2.5],
+                    [3, 2],
+                    [4.8, 1.5],
+                    [4.8, 2.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.01)},
+            ]
+
+            df2_b, _, _ = pg2_b.preprocess_polygons(polys2_b)
+
+            # ============================================================
+            pg2_c = PolygonsGenerator(random_points=20)
+            polys2_c = [
+                {PolygonsGenerator.POLY: [
+                    [5.2, 2.5],
+                    [7, 2],
+                    [5.2, 1.5],
+                    [5.2, 2.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.01)},
+            ]
+
+            df2_c, _, _ = pg2_c.preprocess_polygons(polys2_c)
+
+            df2 = pd.concat([df2_a, df2_b, df2_c])
+            df2[POLY_COL] = 1
+
+            df = pd.concat([df1, df2])
+
+            return df, feature_cols, POLY_COL
         else:
             raise Exception(f'Unsupported polygons {polygons_name}')
 
