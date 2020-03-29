@@ -5,7 +5,6 @@ import random
 import umap
 import alphashape
 import shapely
-import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.graph_objects as go
 import imageio
@@ -26,7 +25,6 @@ from scipy.sparse import csr_matrix
 import numpy.ma as ma
 from sklearn.neighbors import KNeighborsClassifier
 from matplotlib import offsetbox
-from PIL import Image
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -50,13 +48,12 @@ class HandlerLineImage(HandlerBase):
     def create_artists(self, legend, orig_handle,
                        xdescent, ydescent, width, height, fontsize, trans):
 
-        l = matplotlib.lines.Line2D([xdescent + self.offset, xdescent + (width - self.space) / 3. + self.offset],
+        line = matplotlib.lines.Line2D([xdescent + self.offset, xdescent + (width - self.space) / 3. + self.offset],
                                     [ydescent + height / 2., ydescent + height / 2.])
-        l.update_from(orig_handle)
-        l.set_clip_on(False)
-        l.set_transform(trans)
+        line.update_from(orig_handle)
+        line.set_clip_on(False)
+        line.set_transform(trans)
 
-        # TODO ORM increase image size?
         height = height * 1.6
         bb = Bbox.from_bounds(xdescent + (width + self.space) / 3. + self.offset,
                               ydescent,
@@ -68,7 +65,13 @@ class HandlerLineImage(HandlerBase):
         image.set_data(self.image_data)
 
         self.update_prop(image, orig_handle, legend)
-        return [l, image]
+        return [line, image]
+
+
+def check_greater_than_zero(arg, arg_name):
+    if arg < 0:
+        raise Exception(f'{arg_name} must be greater than 0')
+
 
 class AMAP:
     def __init__(self, n_components: int = 2, anchors_method: str = 'birch', n_intra_anchors: int = None,
@@ -76,29 +79,112 @@ class AMAP:
                  dim_reduction_algo: str = 'umap', supervised: bool = False, umap_n_neighbors: int = 15,
                  umap_min_dist: int = 1, reduce_all_points: bool = False,
                  uniform_points_per: str = 'anchor',
-                 k: int = 20, proximity_k: int = 3, self_relation: bool = False, radius_q: float = None, do_relaxation: bool = True,
+                 k: int = 20, proximity_k: int = 3, self_relation: bool = False, radius_q: float = None,
+                 do_relaxation: bool = True,
                  top_greedy: int = 1, magnitude_step: bool = False, n_iter: int = 10, batch_size: int = 1,
                  stop_criteria: float = 0.00001, loss: str = 'Linf', only_inter_relations: bool = False,
                  learning_rate: float = None, mask_sparse_subcluster: int = None, random_points_method: str = 'voronoi',
                  class_to_label: dict = None, random_state: int = None, n_jobs: int = None, verbose: bool = True,
                  dataset: str = 'default', show_fig: bool = True, save_fig: bool = True, is_plotly: bool = False,
-                 do_animation=False, use_spline: bool = False, alpha: float = None, douglas_peucker_tolerance: float = 0.6,
-                 smooth_iter: int = 13, skip_polygons_with_area: float = 0.01,
-                 show_relations: bool = False, mask_relation_in_same_label: bool = False, save_fig_every: int = 1,
+                 do_animation=False, use_spline: bool = False, alpha: float = None,
+                 douglas_peucker_tolerance: float = 0.6,
+                 smooth_iter: int = 3, skip_polygons_with_area: float = 0.01,
+                 mask_relation_in_same_label: bool = True, save_fig_every: int = 1,
                  show_anchors: bool = False, show_points: bool = False, show_polygons: bool = True,
-                 show_inner_blobs: bool = False, alpha_voronoi: bool = False,
-                 show_label_level_plots: bool = True, show_anchor_level_plot = False,
+                 show_inner_blobs: bool = False,
+                 show_label_level_plots: bool = True, show_anchor_level_plot: bool = False,
+                 every_matrix_in_single_plot: bool = True,
                  main_plot_fig_size: tuple = (26, 13), show_anchors_annotation: bool = False,
                  vmax_overlap: float = 0.5, vmax_proximity: float = 0.5,
-                 annotate_images: bool = True, orig_images: list = None):
+                 annotate_images: bool = True, k_annot_clf: int = 40, orig_images: list = None):
         """
-        :param n_components:
-        :param anchors_method:
-        :param n_intra_anchors:
-        :param valid_centroids:
-        :param k:
-        :param random_state:
-        :param verbose:
+
+        :param n_components: number of components reduce dimension to. Currently only 2 is supported due to voronoi
+        :param anchors_method: Algorithm to use for finding anchors, the recomendation is to use birch, supported types
+        ['agglomerative', 'kmeans', 'birch']
+        :param n_intra_anchors: number of anchors to find, ignored if anchors_method is birch
+        :param birch_threshold: birch threshold ignored if anchors_method is not birch
+        :param birch_branching_factor: birch_branching_factor ignored if anchors_method is not birch
+        :param dim_reduction_algo: which dimensionality reduction to use, defule UMAP, supported algos: 
+        ['t-sne', 'umap', 'mds', 'pca', 'lda']
+        :param supervised: Whether to use supervised dimensionality reduction, available only for umap and 
+        lda dim_reduction_algo
+        :param umap_n_neighbors: number of neighbors to use in umap, ignored if dim_reduction_algo is not umap
+        :param umap_min_dist: umap_min_dist to use in umap, ignored if dim_reduction_algo is not umap
+        :param reduce_all_points: whether to reduce dimension of all the points or just the anchors, use this paramter
+        to compare the dim reduction algo to clusters-plot
+        :param uniform_points_per: 'anchor' or 'label' how to generate random points in 2D in case that
+        reduce_all_points is False.
+        'label' will generate points in the entire bounding polygon of the class. 'anchor' depends on the flag
+        random_points_method.
+        :param k: number of neighbors to use for the k nearest neighbors graph for measuring the overlap between
+        sub-clusters
+        :param proximity_k: number of neighbors to use for the k nearest neighbors graph for measuring the proximity
+        between sub-clusters
+        :param self_relation: allow edges between sub-cluster to itself or not
+        :param radius_q: NOT RECOMENDED TO USE, which quantile to take from the radius while using random_points_method
+        'radius'
+        :param do_relaxation: Whether to do relaxation or not
+        :param top_greedy: How many anchors to relax in each iteration
+        :param magnitude_step: Whether to do relaxation in steps corresponding to loss value or fixed value
+        induced by the learning rate
+        :param n_iter: number of relaxation iterations
+        :param batch_size: how many steps of relaxation to do each iteration
+        :param stop_criteria: stop criteria on the loss function
+        :param loss: loss function for relaxation, supported types: 'Linf', 'mse'
+        :param only_inter_relations: NOT RECOMENDED TO USE, keep only edges between different labels in the overlap
+        graph. This flag zero out the diagonal on the overlap matrix before the normaliation. it is recommended to use
+        mask_relation_in_same_label instead of this flag which mask the diagonal after the normalization.
+        :param learning_rate: learning rate for the relaxation, steps will be taken in relative learning rate of the
+        distance between the source and the target anchor
+        :param mask_sparse_subcluster: Skip relaxation on subclusters with lower than mask_sparse_subcluster points.
+        The logic is to ignore sub-clusters which are actually outliers and not interesting in the optimization
+        :param random_points_method: in case that reduce_all_points is False and uniform_points_per is 'anchor',
+        how to generate random points in 2D.
+        supported types: ['box', 'radius', 'voronoi']. 'box' generates random points uniformly in the bounding box of
+        the sub-cluster in 2D based on the radius of the sub-cluster measured in the high-dim,
+        'radius' generates points randomly in the radius of each anchor as measured in the high dimension,
+        'voronoi' generates random points uniformly in the voronoi diagram induces by each anchor in 2D.
+        it is not recommended to use different option rather than 'voronoi'
+        :param class_to_label: dict mapping from class number to label for visualization purposes
+        :param random_state: seed for repruducability
+        :param n_jobs: number of jobs to use, not suported for all flow
+        :param verbose: is verbose prinitng or not
+        :param dataset: directory name corresponding with the dataset, this folder will be the output directory for the
+        plots and info
+        :param show_fig: show main figure or not
+        :param save_fig: save main figure or not
+        :param is_plotly: use plotly plot - DEPRECATED
+        :param do_animation: make animation gif of the relaxation
+        :param use_spline: use spline to find the bounding polygon - NOT RECOMMENDED
+        :param alpha: alpha for alpha shape algorithm. it is used to find the concave hull of each class in 2D.
+        this parameter can be a list with alpha for every class separately or float which will be used for all the
+        classes. 0 is convec hull, increasing the alpha will result in more tight counding polygon.
+        :param douglas_peucker_tolerance: - tolerance for the douglas peucker algorithm used for smoothing the bounding
+        polygon of each class
+        :param smooth_iter: number of smoothing iterations to use for smoothing the polygons using
+        Chaikins_corner_cutting algorithm
+        :param skip_polygons_with_area: do not print small polygons with area smaller than skip_polygons_with_area
+        :param mask_relation_in_same_label: mask overlap between sub-cluster of same label. it is recommended to use
+        this flag and not only_inter_relations
+        :param save_fig_every: save figure every save_fig_every iterations
+        :param show_anchors: show the anchors in the 2D plot or not
+        :param show_points: show the points in the 2D plot or not. use this flag for benchmarking and comparison of
+        clusters-plot to other methods
+        :param show_polygons: show the polygons in the 2D plot, set to False for benchmarking and comparison of
+        clusters-plot to other methods
+        :param show_inner_blobs: show the inner blobs created by the voronoi regions induced by the anchors in 2D.
+        :param show_label_level_plots: show overlap and proximity matrices normalized to label level
+        :param show_anchor_level_plot: show overlap and proximity matrices in anchor (sub-cluster) granularity
+        :param every_matrix_in_single_plot: plot every matrix in single plot or all of matrices in same plot
+        :param main_plot_fig_size: main plot fig size
+        :param show_anchors_annotation: annotate anchors label and subcluster on the plot
+        :param vmax_overlap: upper bound for overlap heatmaps
+        :param vmax_proximity: upper bound for proximity heatmap
+        :param annotate_images: print candidates for image annotations or not, if set to True orig_images must be use
+        :param k_annot_clf: K for KNN classifier used for finding the image annotation candidates.
+        :param orig_images: list of pathes for every image, pathes should be corresponding to the X matrix passed to
+        fit_transform method
         """
         # start with verbose level
         self.verbose = verbose
@@ -109,15 +195,18 @@ class AMAP:
 
         supported_dim_reduction_algos = ['t-sne', 'umap', 'mds', 'pca', 'lda']
         if dim_reduction_algo not in supported_dim_reduction_algos:
-            raise Exception(f'Unsupported dim_reduction_algo {dim_reduction_algo}, supported algos: {supported_dim_reduction_algos}')
+            raise Exception(f'Unsupported dim_reduction_algo {dim_reduction_algo}, '
+                            f'supported algos: {supported_dim_reduction_algos}')
 
         supported_anchors_methods = ['agglomerative', 'kmeans', 'birch']
         if anchors_method not in supported_anchors_methods:
-            raise Exception(f'Unsupported anchors method {anchors_method}, supported methods: {supported_anchors_methods}')
+            raise Exception(f'Unsupported anchors method {anchors_method}, '
+                            f'supported methods: {supported_anchors_methods}')
 
         supported_random_points_method = ['box', 'radius', 'voronoi']
         if random_points_method not in supported_random_points_method:
-            raise Exception(f'Unsupported random_points_method {random_points_method}, supported methods: {supported_random_points_method}')
+            raise Exception(f'Unsupported random_points_method {random_points_method}, '
+                            f' methods: {supported_random_points_method}')
 
         if anchors_method in ['birch']:
             if n_intra_anchors is not None:
@@ -132,31 +221,28 @@ class AMAP:
 
         supported_uniform_points_per = ['label', 'anchor']
         if uniform_points_per not in supported_uniform_points_per:
-            raise Exception(f'Unsupported uniform_points_per {uniform_points_per} , supported methods: {supported_uniform_points_per}')
+            raise Exception(f'Unsupported uniform_points_per {uniform_points_per} , '
+                            f'supported methods: {supported_uniform_points_per}')
 
-        if k <= 0:
-            raise Exception(f'k must be greater than 0')
+        check_greater_than_zero(k, 'k')
+        check_greater_than_zero(proximity_k, 'proximity_k')
+        check_greater_than_zero(top_greedy, 'top_greedy')
+        check_greater_than_zero(n_iter, 'n_iter')
+        check_greater_than_zero(batch_size, 'batch_size')
+        check_greater_than_zero(stop_criteria, 'stop_criteria')
+        check_greater_than_zero(douglas_peucker_tolerance, 'douglas_peucker_tolerance')
+        check_greater_than_zero(smooth_iter, 'smooth_iter')
+        check_greater_than_zero(skip_polygons_with_area, 'skip_polygons_with_area')
+        check_greater_than_zero(save_fig_every, 'save_fig_every')
+        check_greater_than_zero(vmax_overlap, 'vmax_overlap')
+        check_greater_than_zero(vmax_proximity, 'vmax_proximity')
+        check_greater_than_zero(k_annot_clf, 'k_annot_clf')
 
-        if proximity_k < 0:
-            raise Exception(f'proximity_k must be greater than 0')
-
-        if radius_q is not None and not 0 < radius_q <=1:
+        if radius_q is not None and not 0 < radius_q <= 1:
             raise Exception(f'radius_q must bi in (0, 1]')
-
-        if top_greedy < 0:
-            raise Exception(f'top_greedy must be greater than 0')
 
         if not magnitude_step and learning_rate is None:
             raise Exception('Learning rate must be defined if magnitude step is disabled')
-
-        if n_iter < 0:
-            raise Exception(f'n_iter must be greater than 0')
-
-        if batch_size < 0:
-            raise Exception(f'batch_size must be greater than 0')
-
-        if stop_criteria < 0:
-            raise Exception(f'stop_criteria must be greater than 0')
 
         if len(main_plot_fig_size) != 2:
             raise Exception(f'main_plot_fig_size of len {len(main_plot_fig_size)} must be of len 2')
@@ -207,21 +293,23 @@ class AMAP:
         self.douglas_peucker_tolerance = douglas_peucker_tolerance
         self.smooth_iter = smooth_iter
         self.skip_polygons_with_area = skip_polygons_with_area
-        self.show_relations = show_relations
-        self.mask_relation_in_same_label = mask_relation_in_same_label  # TODO ORM consider this is a replacement of "only_inter_relations"
+        self.mask_relation_in_same_label = mask_relation_in_same_label
         self.save_fig_every = save_fig_every
         self.show_points = show_points
         self.show_anchors = show_anchors
         self.show_polygons = show_polygons
         self.show_inner_blobs = show_inner_blobs
-        self.alpha_voronoi = alpha_voronoi
         self.show_label_level_plots = show_label_level_plots
         self.show_anchor_level_plot = show_anchor_level_plot
+        self.every_matrix_in_single_plot = every_matrix_in_single_plot
         self.main_plot_fig_size = main_plot_fig_size
         self.show_anchors_annotation = show_anchors_annotation
         self.vmax_overlap = vmax_overlap
         self.vmax_proximity = vmax_proximity
         self.annotate_images = annotate_images
+        self.k_annot_clf = k_annot_clf
+        if self.annotate_images and orig_images is None:
+            raise Exception(f'Annotate images is enabled but no orig images')
         self.orig_images = orig_images
 
         # create output dir
@@ -241,7 +329,7 @@ class AMAP:
         self.clusters = None  # clusters within each label
         self.intra_class_anchors = None
         self.intra_class_anchors_labels = None
-        self.intra_class_anchors_indices = None  # Note Assuming that if not valid centroids the centroids are concatenated
+        self.intra_class_anchors_indices = None  # Note Assuming that centroids are concatenated
         self.anchors_indices = None
         self.low_dim_anchors = None
         self.low_dim_points = None
@@ -265,6 +353,8 @@ class AMAP:
         # }
         self.overlapped_anchor_per_label = None
         self.pure_anchor_per_label = None
+        self.high_dim_proximity_matrix = None
+        self.low_dim_proximity_matrix = None
 
         # assistance variable
         self.label_col = 'label'
@@ -327,7 +417,7 @@ class AMAP:
 
         # Assuming centroids are concatenated too in _get_intra_class_anchors
         self.anchors_indices = [i for i in range(len(self.y_with_centroids)-len(self.intra_class_anchors_labels),
-                                            len(self.y_with_centroids))]
+                                                 len(self.y_with_centroids))]
         # Build knn Graph
         if self.do_relaxation:
             self._build_knng(self.X_with_centroids)
@@ -342,7 +432,6 @@ class AMAP:
         # DO relaxation in the low dimension
         if self.do_relaxation:
             self.relaxation()
-
 
         return self.low_dim_anchors
 
@@ -383,7 +472,8 @@ class AMAP:
             if self.anchors_method == 'birch':
                 subcluster_centers = cm.subcluster_centers_
             else:
-                subcluster_centers = df[df[self.label_col] == label].groupby([self.label_col, self.cluster_col]).mean().sort_index().values
+                subcluster_centers = df[df[self.label_col] == label].groupby([self.label_col, self.cluster_col]).mean()\
+                    .sort_index().values
             tmp_df = pd.DataFrame(subcluster_centers, columns=feature_cols)
             tmp_df[self.label_col] = label
             tmp_df.reset_index(inplace=True)
@@ -422,7 +512,7 @@ class AMAP:
         radius_df = (df - intra_centroids_df)
         radius_df = radius_df ** 2
         radius_df = radius_df.sum(axis=1)
-        radius_df = radius_df ** (0.5)
+        radius_df = radius_df ** 0.5
         radius_df = radius_df.groupby(level=[0, 1]).quantile(q=self.radius_q if self.radius_q is not None else 1)
         self.anchors_radius = radius_df.values
 
@@ -453,7 +543,7 @@ class AMAP:
     def calc_proximity_matrix(self, dim):
         """
 
-        :param X:
+        :param dim: high or low dim
         :return:
         """
         if dim == 'high':
@@ -496,10 +586,10 @@ class AMAP:
     def _calc_inter_class_relations(self):
         """
 
-        :param X:
         :return:
         """
-        self.inter_class_relations = np.zeros((len(self.intra_class_anchors_labels), len(self.intra_class_anchors_labels)))
+        self.inter_class_relations = np.zeros((len(self.intra_class_anchors_labels),
+                                               len(self.intra_class_anchors_labels)))
         num_labels = len(np.unique(self.intra_class_anchors_labels))
         self.inter_class_relations_label_level = np.zeros((num_labels, num_labels))
         edges_x1, edges_x2 = self.knng.nonzero()
@@ -537,21 +627,21 @@ class AMAP:
 
         if self.annotate_images:
             self.overlapped_anchor_per_label = [None] * num_labels
-            self.pure_anchor_per_label = [[] for i in range(num_labels)]
+            self.pure_anchor_per_label = [[] for _ in range(num_labels)]
             # build KNN classifier
-            knn_classifier = KNeighborsClassifier(n_neighbors=40)  # TODO ORM arg
+            knn_classifier = KNeighborsClassifier(n_neighbors=self.k_annot_clf)
             knn_classifier.fit(self.X_with_centroids, self.y_with_centroids)
             y_predicted = knn_classifier.predict(self.X_with_centroids)
             # outliers
             #    find all mistakes
-            outliers = y_predicted != self.y_with_centroids
             #    for each label
             for label_i in range(num_labels):
                 #       find first mistake for this label
                 for sample_index in np.argwhere(y_predicted != self.y_with_centroids):
                     sample_index = sample_index[0]
                     src_label, target_label = self.y_with_centroids[sample_index], y_predicted[sample_index]
-                    anchor = self._sample_index_to_anchor(int(self.y_with_centroids[sample_index]), self.clusters[sample_index])
+                    anchor = self._sample_index_to_anchor(int(self.y_with_centroids[sample_index]),
+                                                          self.clusters[sample_index])
                     if src_label == label_i:
                         self.cand_samples_to_plot[anchor] = dict()
                         self.cand_samples_to_plot[anchor]['outlier'] = sample_index
@@ -563,7 +653,8 @@ class AMAP:
                 for sample_index in np.argwhere(y_predicted == self.y_with_centroids):
                     sample_index = sample_index[0]
                     src_label, target_label = self.y_with_centroids[sample_index], y_predicted[sample_index]
-                    anchor = self._sample_index_to_anchor(int(self.y_with_centroids[sample_index]), self.clusters[sample_index])
+                    anchor = self._sample_index_to_anchor(int(self.y_with_centroids[sample_index]),
+                                                          self.clusters[sample_index])
                     if src_label == label_i:
                         if anchor not in self.cand_samples_to_plot:
                             self.cand_samples_to_plot[anchor] = dict()
@@ -573,100 +664,15 @@ class AMAP:
                         self.pure_anchor_per_label[src_label].append(anchor)
                         if len(self.pure_anchor_per_label[src_label]) == 3:
                             break
-            # TODO ORM comment to test simpler implementation
-            # out_edges_to_other_anchors = csr_matrix((len(self.X_with_centroids), len(self.intra_class_anchors_labels)))
-            # self_edges_to_self_anchor = csr_matrix((len(self.X_with_centroids), len(self.intra_class_anchors_labels)))
-            # edges_x1, edges_x2 = self.knng.nonzero()
-            # # Initialize inter class anchors
-            # for x1, x2 in zip(edges_x1, edges_x2):
-            #     # skip anchors - we want just real images
-            #     if x1 in self.anchors_indices or x2 in self.anchors_indices:
-            #         continue
-            #
-            #     anchor_x1 = self._sample_index_to_anchor(self.y_with_centroids[x1], self.clusters[x1])
-            #     anchor_x2 = self._sample_index_to_anchor(self.y_with_centroids[x2], self.clusters[x2])
-            #     if self.y_with_centroids[x1] == self.y_with_centroids[x2]:
-            #         self_edges_to_self_anchor[x1, anchor_x2] += 1
-            #     else:
-            #         out_edges_to_other_anchors[x1, anchor_x2] += 1
-            #
-            # anchor_with_max_edges_to_anchor_for_each_sample = out_edges_to_other_anchors.argmax(axis=1)
-            # max_edges_to_anchor_for_each_sample = out_edges_to_other_anchors.max(axis=1).todense()
-            # max_edges_to_self_anchor_for_each_sample = self_edges_to_self_anchor.max(axis=1).todense()
-            #
-            # for i in range(len(self.intra_class_anchors_labels)):
-            #     anchor_label, anchor_cluster = self.anchor_to_label_cluster(i)
-            #
-            #     # Find outlier points
-            #     mask = (self.y_with_centroids == anchor_label) & (self.clusters == anchor_cluster)
-            #     mask = ~mask
-            #     curr_anchor_anchor_with_max_edges_to_anchor_for_each_sample = ma.masked_array(
-            #         anchor_with_max_edges_to_anchor_for_each_sample, mask=mask)
-            #     curr_anchor_max_edges_to_anchor_for_each_sample = ma.masked_array(
-            #         max_edges_to_anchor_for_each_sample, mask=mask)
-            #     # curr_anchor_anchor_with_max_edges_to_anchor_for_each_sample = \
-            #     # anchor_with_max_edges_to_anchor_for_each_sample[
-            #     #     (self.y_with_centroids == anchor_label) & (self.clusters == anchor_cluster)]
-            #     # curr_anchor_max_edges_to_anchor_for_each_sample = max_edges_to_anchor_for_each_sample[
-            #     #     (self.y_with_centroids == anchor_label) & (self.clusters == anchor_cluster)]
-            #
-            #     outlier_point_index = curr_anchor_max_edges_to_anchor_for_each_sample.argmax()
-            #     outlier_point_is_valid = curr_anchor_max_edges_to_anchor_for_each_sample.max() > 0
-            #     outlier_point_similar_to_this_anchor = curr_anchor_anchor_with_max_edges_to_anchor_for_each_sample[
-            #         outlier_point_index]
-            #
-            #     # Find pure points
-            #     max_edges_to_self_anchor_for_each_sample_mask = ma.masked_array(
-            #         max_edges_to_self_anchor_for_each_sample, mask=mask)
-            #     pure_point_index = max_edges_to_self_anchor_for_each_sample_mask.argmax()
-            #
-            #     self.cand_samples_to_plot[i] = dict()
-            #     self.cand_samples_to_plot[i]['outlier'] = outlier_point_index
-            #     self.cand_samples_to_plot[i]['outlier_is_valid'] = outlier_point_is_valid
-            #     self.cand_samples_to_plot[i]['pure'] = pure_point_index
-            #     self.cand_samples_to_plot[i]['target_anchor'] = outlier_point_similar_to_this_anchor
-            #     self.cand_samples_to_plot[i]['src_label'] = anchor_label
-            #     self.cand_samples_to_plot[i]['target_label'] = self.anchor_to_label_cluster(outlier_point_similar_to_this_anchor)[0]
-            #
-            #     # Find the most overlapped and most pure anchors for each label
-            #     # first let's find to most overlap and most pure anchors for each label
-            #     overlapped_anchor_per_label = [None] * num_labels
-            #     pure_anchor_per_label = [None] * num_labels
-            #
-            #     for label_i in range(num_labels):
-            #         max_overlap = -1
-            #         max_anchor_overlap = None
-            #
-            #         min_pure = np.inf
-            #         min_anchor_pure = None
-            #         for i in range(len(self.intra_class_anchors_labels)):
-            #             # skip anchors from other labels
-            #             if label_i != self.intra_class_anchors_labels[i]:
-            #                 continue
-            #             mask_anchors_different_label = self.intra_class_anchors_labels == label_i
-            #             anchor_i_relations_different_label = ma.masked_array(self.inter_class_relations[i],
-            #                                                                  mask=mask_anchors_different_label)
-            #             curr_max = anchor_i_relations_different_label.max()
-            #             curr_min = anchor_i_relations_different_label.min()
-            #             if curr_max > max_overlap:
-            #                 max_overlap = curr_max
-            #                 max_anchor_overlap = i
-            #             if curr_min < min_pure:
-            #                 min_pure = curr_min
-            #                 min_anchor_pure = i
-            #         overlapped_anchor_per_label[label_i] = max_anchor_overlap
-            #         pure_anchor_per_label[label_i] = min_anchor_pure
-            #
-            #     self.overlapped_anchor_per_label = overlapped_anchor_per_label
-            #     self.pure_anchor_per_label = pure_anchor_per_label
 
     def calc_low_dim_inter_class_relations(self):
         """
-        :param X:
+
         :return:
         """
         knng = kneighbors_graph(self.low_dim_points, self.k, mode='distance', n_jobs=self.n_jobs)
-        self.inter_class_relations_low_dim = np.zeros((len(self.intra_class_anchors_labels), len(self.intra_class_anchors_labels)))
+        self.inter_class_relations_low_dim = np.zeros((len(self.intra_class_anchors_labels),
+                                                       len(self.intra_class_anchors_labels)))
         num_labels = len(np.unique(self.intra_class_anchors_labels))
         self.inter_class_relations_low_dim_label_level = np.zeros((num_labels, num_labels))
         edges_x1, edges_x2 = knng.nonzero()
@@ -691,13 +697,6 @@ class AMAP:
             for i in range(len(self.inter_class_relations_label_level)):
                 self.inter_class_relations_low_dim_label_level[i][i] = 0
 
-        # # fill label level matrix
-        # for i in range(self.inter_class_relations.shape[0]):
-        #     for j in range(self.inter_class_relations.shape[1]):
-        #         label_i, _ = self.anchor_to_label_cluster(i)
-        #         label_j, _ = self.anchor_to_label_cluster(j)
-        #         self.inter_class_relations_label_level[label_i][label_j] += self.inter_class_relations[i][j]
-
         # Normalize for each anchor
         sum_row = self.inter_class_relations_low_dim.sum(axis=1, keepdims=True)
         sum_row_label_level = self.inter_class_relations_low_dim_label_level.sum(axis=1, keepdims=True)
@@ -705,7 +704,8 @@ class AMAP:
         sum_row[sum_row == 0] = 1
         sum_row_label_level[sum_row_label_level == 0] = 1
         self.inter_class_relations_low_dim = self.inter_class_relations_low_dim / sum_row
-        self.inter_class_relations_low_dim_label_level = self.inter_class_relations_low_dim_label_level / sum_row_label_level
+        self.inter_class_relations_low_dim_label_level = \
+            self.inter_class_relations_low_dim_label_level / sum_row_label_level
 
     def _dim_reduction(self):
         """
@@ -732,7 +732,8 @@ class AMAP:
             self.print_verbose('Supervised Dim Reduction')
             if self.reduce_all_points:
                 self.print_verbose('Dim Reduction all points')
-                self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids, self.y_with_centroids)
+                self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids,
+                                                                            self.y_with_centroids)
             else:
                 self.print_verbose('Dim Reduction only anchors')
                 self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(self.X_with_centroids[self.anchors_indices],
@@ -764,8 +765,8 @@ class AMAP:
                 else:
                     polygon = Polygon(label_to_contour_df[label][0])
                 points = []
-                # TODO ORM if cluster label is broken to multipolygon to voronoi is invalid... need to handle every polygon by itself
-                anchor_index = -1  # TODO tmp for debug
+                # if cluster label is broken to multipolygon to voronoi is invalid... need to handle every polygon by itself
+                anchor_index = -1  # debug only
                 for anchor, anchor_label in zip(self.low_dim_anchors, self.intra_class_anchors_labels):
                     anchor_index += 1
                     if anchor_label != label:
@@ -774,10 +775,10 @@ class AMAP:
                     if polygon.contains(p) or polygon.intersects(p):
                         points.append(anchor)
                     else:
-                        print(f'ANCHOR: {anchor_index} - did I miss points? type({type(polygon)})')
-                        print(polygon)
-                        print(p)
-                        print('===============')
+                        self.print_verbose(f'ANCHOR: {anchor_index} - did I miss points? type({type(polygon)})')
+                        self.print_verbose(polygon)
+                        self.print_verbose(p)
+                        self.print_verbose('===============')
                         # x, y = polygon.exterior.xy
                         # plt.plot([anchor[0]], [anchor[1]], 'bo')
                         # plt.plot(x, y)
@@ -797,28 +798,15 @@ class AMAP:
                 regions, vertices = AMAP.voronoi_finite_polygons_2d(vor)
 
                 mask = polygon
-                new_vertices = []
                 for region in regions:
                     polygon_region = vertices[region]
                     shape = list(polygon_region.shape)
                     shape[0] += 1
                     p = Polygon(np.append(polygon_region, polygon_region[0]).reshape(*shape)).intersection(mask)
                     if p.is_empty or isinstance(p, Point):
-                        print('bug')
-                        pass
+                        self.print_verbose('Warning intersection of voronoy with polygon is empty or in single point')
                     self.anchor_voronoi_regions.append(p)
                     self.anchor_voronoi_regions_label.append(label)
-
-                    # # intersection can create MultiPolygon
-                    # if isinstance(p, shapely.geometry.polygon.Polygon):
-                    #     polygons = [p]
-                    # else:  # Multipolygon
-                    #     polygons = list(p)
-                    #
-                    # for p in list(polygons):
-                    #     # TODO ORM random points only in one polygon in intersection?!?!?!
-                    #     self.anchor_voronoi_regions.append(p)
-
 
                     # Comment out if you want to see plot of the regions a long with the anchors
             #         poly = np.array(list(zip(p.boundary.coords.xy[0][:-1], p.boundary.coords.xy[1][:-1])))
@@ -971,60 +959,13 @@ class AMAP:
             else:
                 raise Exception(f'Unsupported uniform_points_per: {self.uniform_points_per}')
 
-    # def random_point_low_dim(self, i, low_dim_points):
-    #     if i in self.anchors_indices:
-    #         low_dim_points[i] = self.low_dim_anchors[self.anchors_indices.index(i)]
-    #     else:
-    #         # generate random point
-    #         # TODO ORM doesn't support 3d
-    #         if self.uniform_points_per == 'anchor':  # uniform points per anchor
-    #             anchor_index = self._sample_index_to_anchor(self.y_with_centroids[i], self.clusters[i])
-    #             low_dim_points[i] = self.random_points_per_cluster(anchor_index, 1)[0]
-    #         elif self.uniform_points_per == 'label':
-    #             contours_df = self.anchors_to_contour()
-    #             points = contours_df[contours_df[self.label_col] == self.y_with_centroids[i]][
-    #                 [self.x_col, self.y_col]].values
-    #             concave_hulls = self.get_concave_hull(points, alpha=self.alpha, spline=self.use_spline)
-    #             polygons = []
-    #             areas = []
-    #             minxs = []
-    #             minys = []
-    #             maxxs = []
-    #             maxys = []
-    #             for concave_hull in concave_hulls:
-    #                 # create shapely objects
-    #                 poly = Polygon(concave_hull)
-    #                 polygons.append(poly)
-    #                 areas.append(poly.area)
-    #                 # get bounding box of polygon
-    #                 minx, miny, maxx, maxy = poly.bounds
-    #                 minxs.append(minx)
-    #                 minys.append(miny)
-    #                 maxxs.append(maxx)
-    #                 maxys.append(maxy)
-    #             # choose poly with respect to area
-    #             poly_i = np.random.choice(len(polygons), 1, p=np.array(areas) / sum(areas))[0]
-    #             # minx, miny, maxx, maxy = min(minxs), min(minys), max(maxxs), max(maxys)
-    #             minx, miny, maxx, maxy = minxs[poly_i], minys[poly_i], maxxs[poly_i], maxys[poly_i]
-    #             # generate random points within the bounding box
-    #             in_poly = False
-    #             while not in_poly:
-    #                 x_cord = np.random.uniform(low=minx, high=maxx)
-    #                 y_cord = np.random.uniform(low=miny, high=maxy)
-    #                 for p in polygons:
-    #                     if p.contains(Point(x_cord, y_cord)):
-    #                         low_dim_points[i] = np.array([x_cord, y_cord])
-    #                         in_poly = True
-    #                         break
-    #         else:
-    #             raise Exception(f'Unsupported uniform_points_per: {self.uniform_points_per}')
 
     def random_points_per_cluster(self, anchor_index, number_of_random_points=None):
         if number_of_random_points is not None:
             number_of_random_points = self.anchors_density[anchor_index]
 
         if self.random_points_method == 'voronoi':
-            # TODO ORM make it naive for now and find the correct region by brute force
+            # naive implementation for now and find the correct region by brute force
             low_dim_anchor = Point(self.low_dim_anchors[anchor_index])
             _poly = None
             for i, r in enumerate(self.anchor_voronoi_regions):
@@ -1037,7 +978,6 @@ class AMAP:
                 # ok to return the anchor
                 self.print_verbose(f'anchor {anchor_index} has no voronoi region, why? returning anchor instead of random point - probably not error')
                 return [self.low_dim_anchors[anchor_index]]
-            # _poly = self.anchor_voronoi_regions[anchor_index]  # TODO ORM replaced by naive search
             minx, miny, maxx, maxy = _poly.bounds
             # generate random points within the bounding box
             random_points = []
@@ -1124,12 +1064,11 @@ class AMAP:
         return inter_class_relations, inter_class_relations_low_dim
 
     def relax_anchor_cluster(self, src_anchor_index, target_anchor_index, direction, magnitude):
-        # TODO ORM check theory of relaxation of only major sub-clusters
         if self.mask_sparse_subcluster is not None and self.anchors_density[src_anchor_index] < self.mask_sparse_subcluster:
-            # print(f'SKIPPING RELAXATION FOR src {src_anchor_index} ({self.anchors_density[src_anchor_index]}) '
-            #       f'and target {target_anchor_index} ({self.anchors_density[target_anchor_index]})')
+            self.print_verbose(f'SKIPPING RELAXATION FOR src {src_anchor_index} ({self.anchors_density[src_anchor_index]}) '
+                  f'and target {target_anchor_index} ({self.anchors_density[target_anchor_index]})')
             return
-        print(
+        self.print_verbose(
             f'src: {src_anchor_index} target {target_anchor_index} dir {direction} density {self.anchors_density[src_anchor_index]}'
             f'loss: {self.inter_class_relations[src_anchor_index][target_anchor_index] - self.inter_class_relations_low_dim[src_anchor_index][target_anchor_index] }')
         src_anchor, target_anchor = self.low_dim_anchors[src_anchor_index], self.low_dim_anchors[target_anchor_index]
@@ -1153,21 +1092,6 @@ class AMAP:
         for i in range(self.n_iter):
             self.calc_low_dim_inter_class_relations()
             self.calc_proximity_matrix('low')
-
-            # # TODO ORM checking if mask on the loass is helpfull
-            # if self.mask_sparse_subcluster is not None:
-            #     mask = np.tile(self.anchors_density < self.mask_sparse_subcluster, (len(self.anchors_density), 1)).T
-            #     inter_class_relations_ma = self.inter_class_relations
-            #     inter_class_relations_low_dim_ma = self.inter_class_relations_low_dim
-            #     inter_class_relations_ma[mask] = 0
-            #     inter_class_relations_low_dim_ma[mask] = 0
-            # else:
-            #     inter_class_relations_ma = self.inter_class_relations
-            #     inter_class_relations_low_dim_ma = self.inter_class_relations_low_dim
-            #
-            #
-            # loss = self.loss_func(inter_class_relations_ma, inter_class_relations_low_dim_ma)
-            # loss = self.loss_func(self.inter_class_relations, self.inter_class_relations_low_dim)
 
             inter_class_relations, inter_class_relations_low_dim = self.mask_inter_class_relations()
             loss = self.loss_func(inter_class_relations, inter_class_relations_low_dim)
@@ -1222,61 +1146,14 @@ class AMAP:
         # matrices
         #   if label level plot
         if self.show_label_level_plots:
-            self.matrices_plot(label_level=True, iter=i)
+            self.matrices_plot(label_level=True, iteration=i)
         #   if anchors level plot
         if self.show_anchor_level_plot:
-            self.matrices_plot(label_level=False, iter=i)
+            self.matrices_plot(label_level=False, iteration=i)
 
         # loss
         self.loss_plot()
 
-    # def anchors_plot_sns(self, i, is_first, is_last):
-    #     df = pd.DataFrame(data=self.low_dim_points, columns=[self.x_col, self.y_col])
-    #     df[self.label_col] = self.y_with_centroids
-    #     df[self.cluster_col] = self.clusters
-    #     df[self.anchor_col] = False
-    #     df.loc[df.index.isin(self.anchors_indices), self.anchor_col] = True
-    #     fig = plt.figure(figsize=self.main_plot_fig_size)
-    #
-    #     # low dim plot
-    #     shape = (4, 8)
-    #     if self.class_to_label:
-    #         df[self.label_col] = df[self.label_col].transform(lambda x: f'{x}_{self.class_to_label[x]}')
-    #     else:
-    #         df[self.label_col] = df[self.label_col].transform(lambda x: f'label_{x}')
-    #
-    #     self.points_anchors_patches_plot(shape, fig, df, i, is_first, is_last)
-    #
-    #     # loss
-    #     self.loss_plot(shape, fig, is_last)
-    #
-    #     # loss squared diff heatmap plot
-    #     if self.show_label_level_plots:
-    #         self.loss_heatmap_label_level_plot(shape, fig, is_last)
-    #     else:
-    #         self.loss_heatmap_plot(shape, fig, is_last)
-    #
-    #     if self.show_relations:
-    #         # low dim relation
-    #         if self.show_label_level_plots:
-    #             # self.low_dim_relations_label_level_plot(shape, fig, is_last)
-    #             self.proximity_matrix_plot(shape, fig, is_last, 'low')
-    #         else:
-    #             self.low_dim_relations_plot(shape, fig, is_last)
-    #
-    #         # high dim relations
-    #         if self.show_label_level_plots:
-    #             # self.high_dim_relations_label_level_plot(shape, fig, is_last)
-    #             self.proximity_matrix_plot(shape, fig, is_last, 'high')
-    #         else:
-    #             self.high_dim_relations_plot(shape, fig, is_last)
-    #
-    #     fig.suptitle(f'{self.dim_reduction_algo}_{self.anchors_method}')
-    #     if self.save_fig:
-    #         fig.savefig(f'{self.output_dir}/iter{i}.png')
-    #     if self.show_fig:
-    #         plt.show()
-    #     plt.close()
 
     @staticmethod
     def expand_matplotlib_bbox(extent, sw, sh):
@@ -1292,7 +1169,7 @@ class AMAP:
         a = np.array([[-deltaw, -deltah], [deltaw, deltah_top]])
         return Bbox(extent._points + a)
 
-    def matrices_plot(self, label_level, iter):
+    def matrices_plot(self, label_level, iteration):
         a_min = 0
         a_max = 0.1
         rows = ['Overlap', 'Proximity']
@@ -1329,13 +1206,11 @@ class AMAP:
                 'Proximity High-Dim': {'mat': self.high_dim_proximity_matrix, 'ticks': label_level_ticks},
                 'Proximity Low-Dim': {'mat': self.low_dim_proximity_matrix, 'ticks': label_level_ticks},
             }
-        # TODO ORM arg
-        separate_matrices = True
-        if not separate_matrices:
+        if not self.every_matrix_in_single_plot:
             fig, axs = plt.subplots(len(rows), len(cols), figsize=(38, 25))
         for i, row in enumerate(rows):
             for j, col in enumerate(cols):
-                if separate_matrices:
+                if self.every_matrix_in_single_plot:
                     fig, ax = plt.subplots(1,1, figsize=(14,10))
                 else:
                     ax = axs[i][j]
@@ -1360,26 +1235,22 @@ class AMAP:
                         cmap = 'YlGnBu'
                     else:  # Proximity
                         cmap = 'BuPu'
-                        vmax = self.vmax_proximity  # TODO overriding vmax for proximity
+                        vmax = self.vmax_proximity
                 g = sns.heatmap(matrix, ax=ax, annot=annot, fmt='.3f', square=True, cmap=cmap,
                             vmin=vmin, vmax=vmax, center=((vmax - vmin)/2),
                             xticklabels=ticks, yticklabels=ticks, annot_kws={"size": 35})
-                # ax.set_title(matrix_key)   # TODO ORM comment out for paper
-                # ax.tick_params(axis='both', which='major', labelsize=25, rotation=90)
-                # ax.tick_params(axis='both', which='minor', labelsize=25, rotation=90)
+                # ax.set_title(matrix_key)   # comment out for paper
                 ax.tick_params(axis='both', which='major', labelsize=25)
                 ax.tick_params(axis='both', which='minor', labelsize=25)
                 g.set_yticklabels(g.get_yticklabels(), rotation=0)
                 g.set_xticklabels(g.get_xticklabels(), rotation=90)
-                if self.save_fig and separate_matrices:
+                if self.save_fig and self.every_matrix_in_single_plot:
                     # Save just the portion _inside_ the second axis's boundaries
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                    # fig.savefig(f'{self.output_dir}/{matrix_key}_iter_{iter}.png', bbox_inches=extent.expanded(1.62, 1.62))
-                    fig.savefig(f'{self.output_dir}/{matrix_key}_iter_{iter}.png',
+                    fig.savefig(f'{self.output_dir}/{matrix_key}_iter_{iteration}.png',
                                 bbox_inches=AMAP.expand_matplotlib_bbox(extent, 2.5, 2.5))
-                    # fig.savefig(f'{self.output_dir}/{matrix_key}_iter_{iter}.png')
 
-        if not separate_matrices:
+        if not self.every_matrix_in_single_plot:
             if self.save_fig:
                 # Save just the portion _inside_ the second axis's boundaries
                 fig.savefig(f'{self.output_dir}/Overlap_and_Proximity_Matrices{"_per_Label" if label_level else ""}.png')
@@ -1548,7 +1419,7 @@ class AMAP:
                             hue_order=hue_order,
                             s=240)
         else:
-            # TODO ORM test in order to see if it enables the legend
+            # it enables the legend
             sns.lineplot(data=df[df['anchor'] == True], x=self.x_col, y=self.y_col, hue=self.label_col,
                          ax=ax,
                          alpha=0,
@@ -1588,9 +1459,6 @@ class AMAP:
                     coords = concave_hull
                     line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(coords) - 2) + [Path.CLOSEPOLY]
                     path = Path(coords, line_cmde)
-                    # if show_inner_blobs and not self.alpha_voronoi:
-                    #     patch = patches.PathPatch(path, facecolor=c, alpha=0.2, linewidth=None, edgecolor=None)
-                    #     ax.add_patch(patch)
                     patch = patches.PathPatch(path, facecolor=c, alpha=0.2, linewidth=None, edgecolor=None)
                     ax.add_patch(patch)
                     patch = patches.PathPatch(path, facecolor=None, linewidth=10, edgecolor=c, fill=False)
@@ -1601,7 +1469,6 @@ class AMAP:
                 label_to_contour_df = dict()
                 contours_df = self.anchors_to_contour()
                 palette = itertools.cycle(sns.color_palette())
-                inner_blobs_for_alpha = []
                 for label in sorted(contours_df[self.label_col].unique()):
                     c = next(palette)
                     # Skip labels with less than 3 anchors, Voronoi does not support that
@@ -1660,37 +1527,6 @@ class AMAP:
                             path = Path(inner_blobs, line_cmde)
                             patch = patches.PathPatch(path, facecolor=None, linewidth=5, edgecolor=c, fill=False)
                             ax.add_patch(patch)
-                            if self.alpha_voronoi:
-                                # TODO ORM naive implementation
-                                # search for the anchor in this voronoi region
-                                # get its density
-                                alpha = None
-                                for anchor_index in range(len(self.low_dim_anchors)):
-                                    if self.intra_class_anchors_labels[anchor_index] != label:
-                                        continue
-                                    low_dim_anchor = Point(self.low_dim_anchors[anchor_index])
-                                    if p.contains(low_dim_anchor) or p.intersects(low_dim_anchor):  # in case that the anchor intersects the exterior polygon
-                                        # alpha = self.anchors_density_alpha[anchor_index]
-                                        anchor_density = self.anchors_density[anchor_index]
-                                        break
-                                inner_blobs_for_alpha.append({'path': path, 'facecolor': c, 'linewidth': 5, 'edgecolor': c,
-                                                   'fill': True, 'density': anchor_density})
-                                # TODO ORM comment out to test alpha of inner polygons
-                                patch = patches.PathPatch(path, facecolor=c, linewidth=5, edgecolor=c, fill=False)
-                                ax.add_patch(patch)
-                # anchors_alpha = np.array([ib['density'] for ib in inner_blobs_for_alpha])
-                # from sklearn.preprocessing import MinMaxScaler
-                # anchors_alpha = MinMaxScaler((0.2, 0.8)).fit_transform(anchors_alpha.reshape(-1, 1)).flatten()
-                # for ib_index in range(len(inner_blobs_for_alpha)):
-                #     path = inner_blobs_for_alpha[ib_index]['path']
-                #     facecolor = inner_blobs_for_alpha[ib_index]['facecolor']
-                #     linewidth = inner_blobs_for_alpha[ib_index]['linewidth']
-                #     edgecolor = inner_blobs_for_alpha[ib_index]['edgecolor']
-                #     fill = inner_blobs_for_alpha[ib_index]['fill']
-                #     patch = patches.PathPatch(path=path, facecolor=facecolor, linewidth=linewidth, edgecolor=edgecolor,
-                #                               fill=fill,
-                #                               alpha=anchors_alpha[ib_index], capstyle='round')
-                #     ax.add_patch(patch)
 
 
             if annotate_images:
@@ -1748,7 +1584,7 @@ class AMAP:
                         pure = self.cand_samples_to_plot[anchor]['pure']
                         src_label = self.cand_samples_to_plot[anchor]['src_label']
                         if self.orig_images:
-                                # TODO ORM probably doesn't work now
+                                # probably doesn't work now
                             img_path = self.orig_images[pure]
                             self.print_verbose(f'src_label: {src_label} pure path: \n{img_path}')
                             handler_map[current_handles[src_label+1]] = HandlerLineImage(img_path)
@@ -1816,13 +1652,9 @@ class AMAP:
             z_plus_arr[:, 2] = self.low_dim_anchors[:, 2] + (self.anchors_radius if self.radius_q is not None else 0.01)
             z_minus_arr = self.low_dim_anchors.copy()
             z_minus_arr[:, 2] = self.low_dim_anchors[:, 2] - (self.anchors_radius if self.radius_q is not None else 0.01)
-        # TODO ORM try to add also original points - seems like it is working
-        # anchors_radius = np.concatenate([x_plus_arr, x_minus_arr, y_plus_arr, y_minus_arr])
         anchors_radius = np.concatenate([self.low_dim_anchors, x_plus_arr, x_minus_arr, y_plus_arr, y_minus_arr])
         if self.n_components > 2:
             anchors_radius = np.concatenate([anchors_radius, z_plus_arr, z_minus_arr])
-        # TODO ORM try to add also original points - seems like it is working
-        # n_points_per_anchor = self.n_components * 2
         n_points_per_anchor = 1 + self.n_components * 2
         labels = []
         for i in range(n_points_per_anchor):
@@ -1840,9 +1672,9 @@ class AMAP:
         return list(zip(x, y))
 
     @staticmethod
-    def smooth_poly_Chaikins_corner_cutting_iter(poly, iter=1):
+    def smooth_poly_Chaikins_corner_cutting_iter(poly, iteration=1):
         new_poly = poly[:]
-        for i in range(iter):
+        for i in range(iteration):
             new_poly = AMAP.smooth_poly_Chaikins_corner_cutting(new_poly, True)
         return new_poly
 
@@ -1890,7 +1722,7 @@ class AMAP:
                 if vis:
                     smooth_shape = np.array(AMAP.smooth_poly_Chaikins_corner_cutting_iter(
                                         AMAP.smooth_poly_Douglas_Peucker(list(zip(x, y)), douglas_peucker_tolerance),
-                        iter=smooth_iter))
+                        iteration=smooth_iter))
                 else:
                     smooth_shape = np.array(list(zip(x, y)))
             else:
