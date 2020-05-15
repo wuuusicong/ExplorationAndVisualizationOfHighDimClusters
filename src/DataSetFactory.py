@@ -2,7 +2,7 @@ import pandas as pd
 import PolygonsFactory as pf
 from sklearn import datasets
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -143,13 +143,15 @@ class DataSetFactory:
         """
 
         df_red = pd.read_csv('../data/wine_quality/winequality-red.csv', sep=';')
+        df_red['type'] = 'red'
         df_white = pd.read_csv('../data/wine_quality/winequality-white.csv', sep=';')
+        df_white['type'] = 'white'
         df = pd.concat([df_red, df_white])
         quality_col = 'quality'
         label_col = 'label'
-        feature_cols = [col for col in df.columns if col != quality_col]
-        print('Normalizing features using min max scaler')
-        df[feature_cols] = MinMaxScaler().fit_transform(df[feature_cols].values)
+        feature_cols = [col for col in df.columns if col != quality_col and col != 'type']
+        print('Normalizing features using standard scaler')
+        df[feature_cols] = StandardScaler().fit_transform(df[feature_cols].values)
         df[label_col] = df[quality_col].apply(lambda x: x-3)  # quality is from 3 to 8
 
         if sample is not None:
@@ -159,6 +161,22 @@ class DataSetFactory:
 
         return DataSet(df, feature_cols, label_col,
                        class_to_label=class_to_label)
+
+    @staticmethod
+    def wine_sklearn(sample, scale, random_state=None):
+        features, target = datasets.load_wine(return_X_y=True)
+        if scale:
+            print('using min max scaler')
+            df = pd.DataFrame(MinMaxScaler().fit_transform(features))
+        else:
+            print('skip scaling')
+            df = pd.DataFrame(features)
+        feature_cols = df.columns
+        label_col = 'label'
+        df[label_col] = target
+        class_to_label = {0: 'class_0', 1: 'class_1', 2: 'class_2'}
+
+        return DataSet(df, feature_cols, label_col, class_to_label)
 
     @staticmethod
     def shuttle(sample, random_state=None):
@@ -237,6 +255,38 @@ class DataSetFactory:
         else:
             encoded_features = np.load(f'../data/MNIST_AE/mnist_orig_dim.npy')
         labels = np.load(f'../data/MNIST_AE/mnist_labels_ae.npy')
+
+        feature_cols = ['pixel' + str(i) for i in range(encoded_features.shape[1])]
+        df = pd.DataFrame(encoded_features, columns=feature_cols)
+        df['label'] = labels
+        df['label'] = df['label'].apply(lambda i: int(i))
+
+        digit_to_label = {i: i for i in df['label'].unique()}
+        if is_subset:
+            df = df[df['label'].isin([0, 3, 8, 9])]
+            df['label'] = df['label'].replace({0: 0, 3: 1, 8: 2, 9: 3})
+            digit_to_label = {0: 0, 1: 3, 2: 8, 3: 9}
+
+        if sample is not None:
+            df = df.sample(frac=sample, random_state=random_state)
+
+        class_to_label = {i: f'Digit_{digit_to_label[i]}' for i in df['label'].unique()}
+
+        return DataSet(df, feature_cols, 'label', class_to_label)
+
+    @staticmethod
+    def mnist_deep(dim=None, epoch_acc=None, sample=None, is_subset=False, random_state=None):
+        if dim is not None:
+            encoded_features = np.load(f'../data/DeepFeaturesMnist/mnist_conv{dim[0]}_conv{dim[1]}.npy')
+            labels = np.load(f'../data/DeepFeaturesMnist/mnist_conv{dim[0]}_conv{dim[1]}_label.npy')
+            labels = np.argmax(labels, axis=1)  # it is one-hot vectors
+        elif epoch_acc is not None:
+            encoded_features = np.load(f'../data/DeepFeaturesMnist/mnist_conv32_conv64_{epoch_acc[0]}_epochs_acc_{epoch_acc[1]}.npy')
+            labels = np.load(f'../data/DeepFeaturesMnist/mnist_conv32_conv64_label_{epoch_acc[0]}_epochs_{epoch_acc[1]}.npy')
+            labels = np.argmax(labels, axis=1)  # it is one-hot vectors
+        else:
+            encoded_features = np.load(f'../data/MNIST_AE/mnist_orig_dim.npy')
+            labels = np.load(f'../data/MNIST_AE/mnist_labels_ae.npy')
 
         feature_cols = ['pixel' + str(i) for i in range(encoded_features.shape[1])]
         df = pd.DataFrame(encoded_features, columns=feature_cols)
@@ -465,6 +515,62 @@ class DataSetFactory:
         return ds
 
     @staticmethod
+    def get_deep_features_imagenet_cats(net, random_state, sample, is_subset):
+        X = joblib.load(f'../data/ImageNetCropped/{net}_cats_embeddings.pickle')
+        y = joblib.load(f'../data/ImageNetCropped/{net}_cats_labels.pickle')
+        df = pd.DataFrame(X)
+        feature_cols = [f'Feat{i:03}' for i in range(X.shape[1])]
+        df.columns = feature_cols
+        label_col = 'Label'
+        orig_image_col = 'orig_image'
+        df[label_col] = y
+
+        class_names = [
+            'tabby',  # n02123045
+            'Persian_cat',  # n02123394
+            'Siamese_cat',  # n02123597
+            'leopard',  # n02128385
+            'snow_leopard',  # n02128757
+            'tiger',  # n02129604
+            'cheetah',  # n02130308
+            'cougar',  # n02125311
+            'lynx',  # n02127052
+            'jaguar',  # n02128925
+        ]  #
+        class_to_label = {i: class_names[i] for i in range(len(class_names))}
+
+        with open(f'../data/ImageNetCropped/{net}_data_cats.txt', 'r') as f:
+            lines = f.readlines()
+            images_path = []
+            for line in lines:
+                images_path.append(line[:-1])  # remove new line character
+
+        # add to columns in the dataframe to take the correct list after sampling
+        print(df.shape, len(images_path))
+        df[orig_image_col] = images_path
+
+        ds = DataSet(df=df, feature_cols=feature_cols, label_col=label_col, class_to_label=class_to_label,
+                     orig_images=images_path)
+
+        if is_subset:
+            # Keep Only 3 labels: 'Ankle boot', 'Sneaker', 'Sandal', 'Trouser',
+            # ds.df = ds.df[ds.df[ds.label_col].isin([1, 5, 7, 9])]
+            # ds.df[ds.label_col] = ds.df[ds.label_col].replace({1: 0, 5: 1, 7: 2, 9: 3})
+            ds.df = ds.df[ds.df[ds.label_col].isin(is_subset)]
+            ds.df[ds.label_col] = ds.df[ds.label_col].replace({orig_label: new_label for new_label, orig_label in
+                                                               enumerate(is_subset)})
+            ds.class_to_label = {new_label: ds.class_to_label[old_label] for new_label, old_label in
+                                 enumerate(is_subset)}
+
+        # Take only sample for now
+        if sample is not None:
+            print(f'Taking sample of {sample} from the data')
+            ds.df = ds.df.sample(frac=sample, random_state=random_state)
+            ds.orig_images = ds.df[orig_image_col].tolist()
+
+        return ds
+
+    @staticmethod
     def get_dataset(dataset_name, random_state=None, sample=None, is_subset=False):
         if random_state is not None:
             np.random.seed(random_state)
@@ -496,6 +602,20 @@ class DataSetFactory:
             return DataSetFactory.mnist_038_pca_d()
         if dataset_name == 'MNIST_038_PCA16':
             return DataSetFactory.mnist_038_pca_d(16)
+        if dataset_name == 'MNIST-DEEP-2-4':
+            return DataSetFactory.mnist_deep(dim=(2,4), sample=sample, is_subset=is_subset, random_state=random_state)
+        if dataset_name == 'MNIST-DEEP-32-64':
+            return DataSetFactory.mnist_deep(dim=(32,64), sample=sample, is_subset=is_subset, random_state=random_state)
+        if dataset_name == 'MNIST-DEEP-32-64-1000-985':
+            return DataSetFactory.mnist_deep(dim=None, epoch_acc=(1000,'98_5'), sample=sample, is_subset=is_subset, random_state=random_state)
+        if dataset_name == 'MNIST-DEEP-32-64-3-64':
+            return DataSetFactory.mnist_deep(dim=None, epoch_acc=(3,'64'), sample=sample, is_subset=is_subset, random_state=random_state)
+        if dataset_name == 'MNIST-DEEP-32-64-9-80':
+            return DataSetFactory.mnist_deep(dim=None, epoch_acc=(9,'80'), sample=sample, is_subset=is_subset, random_state=random_state)
+        if dataset_name == 'MNIST-DEEP-32-64-200-96':
+            return DataSetFactory.mnist_deep(dim=None, epoch_acc=(200,'96'), sample=sample, is_subset=is_subset, random_state=random_state)
+        if dataset_name == 'MNIST-DEEP-32-64-750-984':
+            return DataSetFactory.mnist_deep(dim=None, epoch_acc=(750,'98_4'), sample=sample, is_subset=is_subset, random_state=random_state)
         if dataset_name in ['fists_no_overlap', 'cross', 'cross-denses', 'cross7', 'simple_overlap', 'dense_in_sparse', 'hourglass',
                               'hourglass-spike', 'hourglass2']:
             df, feature_cols, label_col = pf.PolygonsFactory.get_polygons(dataset_name)
@@ -504,6 +624,8 @@ class DataSetFactory:
             return DataSetFactory.fashion_mnist(dataset_name, random_state, sample, is_subset)
         if dataset_name == 'vgg_features_imagenet':
             return DataSetFactory.get_deep_features_imagenet('vgg', random_state, sample, is_subset)
+        if dataset_name == 'vgg_features_cats':
+            return DataSetFactory.get_deep_features_imagenet_cats('vgg', random_state, sample, is_subset)
         if dataset_name == 'densenet_features_imagenet':
             return DataSetFactory.get_deep_features_imagenet('densenet', random_state, sample, is_subset)
         if dataset_name == 'mobilenet_features_imagenet':
@@ -512,6 +634,10 @@ class DataSetFactory:
             return DataSetFactory.cover_type(sample, random_state=random_state)
         if dataset_name == 'wine':
             return DataSetFactory.wine(sample, random_state=random_state)
+        if dataset_name == 'wine-sklearn-scaled':
+            return DataSetFactory.wine_sklearn(sample, scale=True, random_state=random_state)
+        if dataset_name == 'wine-sklearn-not-scaled':
+            return DataSetFactory.wine_sklearn(sample, scale=False, random_state=random_state)
         if dataset_name == 'shuttle':
             return DataSetFactory.shuttle(sample, random_state=random_state)
         if dataset_name == 'hapt-train':

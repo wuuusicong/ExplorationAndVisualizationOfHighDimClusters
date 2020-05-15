@@ -1,3 +1,14 @@
+# TODO AMAP to ClusterPlot
+# TODO Print to logging
+# TODO Documentation
+# TODO Split dim reduction and plot
+# TODO Remove non-required imports
+# TODO Remove code from global scope
+# TODO don't set sns settings by default
+# TODO delete dead code (plotly)
+# TODO pytest
+# TODO pep8
+
 import os
 import numpy as np
 import pandas as pd
@@ -21,6 +32,7 @@ from shapely.geometry import Point
 from shapely.geometry import Point, Polygon, MultiPolygon
 from scipy.spatial import Voronoi
 from sklearn.metrics import pairwise_distances
+from sklearn.neighbors import LocalOutlierFactor
 from scipy.sparse import csr_matrix
 import numpy.ma as ma
 from sklearn.neighbors import KNeighborsClassifier
@@ -77,7 +89,7 @@ class AMAP:
     def __init__(self, n_components: int = 2, anchors_method: str = 'birch', n_intra_anchors: int = None,
                  birch_threshold: float = 0.3, birch_branching_factor: int = None,
                  dim_reduction_algo: str = 'umap', supervised: bool = False, umap_n_neighbors: int = 15,
-                 umap_min_dist: int = 1, reduce_all_points: bool = False,
+                 umap_min_dist: int = 1, tsne_perplexity: float = 30.0, reduce_all_points: bool = False,
                  uniform_points_per: str = 'anchor',
                  k: int = 20, proximity_k: int = 3, self_relation: bool = False, radius_q: float = None,
                  do_relaxation: bool = True,
@@ -86,7 +98,7 @@ class AMAP:
                  learning_rate: float = None, mask_sparse_subcluster: int = None, random_points_method: str = 'voronoi',
                  class_to_label: dict = None, random_state: int = None, n_jobs: int = None, verbose: bool = True,
                  dataset: str = 'default', show_fig: bool = True, save_fig: bool = True, is_plotly: bool = False,
-                 do_animation=False, use_spline: bool = False, alpha: float = None,
+                 do_animation=False, use_spline: bool = False, alpha: float = None, remove_outliers_k: float = None,
                  douglas_peucker_tolerance: float = 0.6,
                  smooth_iter: int = 3, skip_polygons_with_area: float = 0.01,
                  mask_relation_in_same_label: bool = True, save_fig_every: int = 1,
@@ -96,7 +108,8 @@ class AMAP:
                  every_matrix_in_single_plot: bool = True,
                  main_plot_fig_size: tuple = (26, 13), show_anchors_annotation: bool = False,
                  vmax_overlap: float = 0.5, vmax_proximity: float = 0.5,
-                 annotate_images: bool = True, k_annot_clf: int = 40, orig_images: list = None):
+                 annotate_images: bool = True, k_annot_clf: int = 40, orig_images: list = None,
+                 transpose_low_dim: bool = False):
         """
 
         :param n_components: number of components reduce dimension to. Currently only 2 is supported due to voronoi
@@ -257,6 +270,7 @@ class AMAP:
         self.supervised = supervised
         self.umap_n_neighbors = umap_n_neighbors
         self.umap_min_dist = umap_min_dist
+        self.tsne_perplexity = tsne_perplexity
         self.reduce_all_points = reduce_all_points
         self.uniform_points_per = uniform_points_per
         self.k = k  # note that in t-sne paper when they presented this method they used k=20 for mnist
@@ -290,6 +304,7 @@ class AMAP:
         self.do_animation = do_animation
         self.use_spline = use_spline
         self.alpha = alpha
+        self.remove_outliers_k = remove_outliers_k
         self.douglas_peucker_tolerance = douglas_peucker_tolerance
         self.smooth_iter = smooth_iter
         self.skip_polygons_with_area = skip_polygons_with_area
@@ -311,6 +326,7 @@ class AMAP:
         if self.annotate_images and orig_images is None:
             raise Exception(f'Annotate images is enabled but no orig images')
         self.orig_images = orig_images
+        self.transpose_low_dim = transpose_low_dim
 
         # create output dir
         now = datetime.now()
@@ -662,7 +678,7 @@ class AMAP:
                         self.cand_samples_to_plot[anchor]['src_label'] = src_label
                         print(f'Adding anchor {anchor} to label {src_label} = {self.pure_anchor_per_label[src_label]}')
                         self.pure_anchor_per_label[src_label].append(anchor)
-                        if len(self.pure_anchor_per_label[src_label]) == 3:
+                        if len(self.pure_anchor_per_label[src_label]) == 10:
                             break
 
     def calc_low_dim_inter_class_relations(self):
@@ -714,7 +730,7 @@ class AMAP:
         :return:
         """
         if self.dim_reduction_algo == 't-sne':
-            dim_reduction_algo_inst = TSNE(random_state=self.random_state)
+            dim_reduction_algo_inst = TSNE(random_state=self.random_state, perplexity=self.tsne_perplexity)
         elif self.dim_reduction_algo == 'umap':
             dim_reduction_algo_inst = umap.UMAP(n_components=self.n_components, min_dist=self.umap_min_dist,
                                                 n_neighbors=self.umap_n_neighbors,
@@ -754,10 +770,12 @@ class AMAP:
 
             # Support random points in Voronoi regions
             label_to_contour_df = dict()
-            contours_df = self.anchors_to_contour()
+            contours_df = self.get_contour_df()
             for label in sorted(contours_df[self.label_col].unique()):
                 points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
-                label_to_contour_df[label] = self.get_concave_hull(points, alpha=self.alpha[label], spline=self.use_spline,
+                label_to_contour_df[label] = self.get_concave_hull(points, alpha=self.alpha[label],
+                                                                   remove_outliers_k=self.remove_outliers_k,
+                                                                   spline=self.use_spline,
                                                                    douglas_peucker_tolerance=self.douglas_peucker_tolerance,
                                                                    smooth_iter=self.smooth_iter)
                 if len(label_to_contour_df[label]) > 1:
@@ -775,10 +793,12 @@ class AMAP:
                     if polygon.contains(p) or polygon.intersects(p):
                         points.append(anchor)
                     else:
-                        self.print_verbose(f'ANCHOR: {anchor_index} - did I miss points? type({type(polygon)})')
-                        self.print_verbose(polygon)
-                        self.print_verbose(p)
-                        self.print_verbose('===============')
+                        pass
+                        # TODO ORM change verbosity
+                        # self.print_verbose(f'ANCHOR: {anchor_index} - did I miss points? type({type(polygon)})')
+                        # self.print_verbose(polygon)
+                        # self.print_verbose(p)
+                        # self.print_verbose('===============')
                         # x, y = polygon.exterior.xy
                         # plt.plot([anchor[0]], [anchor[1]], 'bo')
                         # plt.plot(x, y)
@@ -826,6 +846,11 @@ class AMAP:
                     concave_hulls = None
                 self.random_point_low_dim(i, low_dim_points, concave_hulls)
             self.low_dim_points = np.array(low_dim_points)
+
+        # Rotate low dim points and anchors
+        if self.transpose_low_dim:
+            self.low_dim_points[:, [0, 1]] = self.low_dim_points[:, [1, 0]]
+            self.low_dim_anchors[:, [0, 1]] = self.low_dim_anchors[:, [1, 0]]
 
     @staticmethod
     def voronoi_finite_polygons_2d(vor, radius=None):
@@ -1427,8 +1452,12 @@ class AMAP:
         # For each anchor, we add a text above the anchor
         if self.show_anchors_annotation:
             for j, anchor_i in enumerate(self.anchors_indices):
+                # ax.text(self.low_dim_points[anchor_i][0], self.low_dim_points[anchor_i][1],
+                #         f'{str(self.anchor_to_label_cluster(j, visualization=True))}',
+                #         horizontalalignment='center', size='medium',
+                #         color='black', weight='semibold')
                 ax.text(self.low_dim_points[anchor_i][0], self.low_dim_points[anchor_i][1],
-                        f'{str(self.anchor_to_label_cluster(j, visualization=True))}',
+                        f'{self.anchors_density[j]}',
                         horizontalalignment='center', size='medium',
                         color='black', weight='semibold')
         # ax.set_title(f'iter{i}')
@@ -1442,19 +1471,22 @@ class AMAP:
 
         # Add patches
         if self.show_polygons:
-            contours_df = self.anchors_to_contour()
+            contours_df = self.get_contour_df()
             import itertools
             palette = itertools.cycle(sns.color_palette())
             for label in sorted(contours_df[self.label_col].unique()):
                 points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
-                concave_hulls = self.get_concave_hull(points, alpha=self.alpha[label], spline=self.use_spline, vis=True,
+                concave_hulls = self.get_concave_hull(points, alpha=self.alpha[label],
+                                                      remove_outliers_k=self.remove_outliers_k,
+                                                      spline=self.use_spline, vis=True,
                                                       douglas_peucker_tolerance=self.douglas_peucker_tolerance,
                                                       smooth_iter=self.smooth_iter)
                 c = next(palette)
                 for concave_hull in concave_hulls:
                     # Skip polygons with very small area that will appear as dots
                     if Polygon(concave_hull).area < self.skip_polygons_with_area:
-                        self.print_verbose(f'Skipping polygon of label {label} with area {Polygon(concave_hull).area}')
+                        # TODO ORM change verbosity
+                        # self.print_verbose(f'Skipping polygon of label {label} with area {Polygon(concave_hull).area}')
                         continue
                     coords = concave_hull
                     line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(coords) - 2) + [Path.CLOSEPOLY]
@@ -1467,7 +1499,7 @@ class AMAP:
             if show_inner_blobs:
                 # In case of performance issue, calculate the voronoi regions outside
                 label_to_contour_df = dict()
-                contours_df = self.anchors_to_contour()
+                contours_df = self.get_contour_df()
                 palette = itertools.cycle(sns.color_palette())
                 for label in sorted(contours_df[self.label_col].unique()):
                     c = next(palette)
@@ -1476,6 +1508,7 @@ class AMAP:
                         continue
                     points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
                     label_to_contour_df[label] = self.get_concave_hull(points, alpha=self.alpha[label],
+                                                                       remove_outliers_k=self.remove_outliers_k,
                                                                        spline=self.use_spline,
                                                                        douglas_peucker_tolerance=self.douglas_peucker_tolerance,
                                                                        smooth_iter=self.smooth_iter, vis=True)
@@ -1605,7 +1638,6 @@ class AMAP:
                              bbox_to_anchor=(1.05, 1), loc=2, fontsize=24)
 
 
-
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
         # remove ticks
@@ -1638,28 +1670,31 @@ class AMAP:
                              'rgb(227, 119, 194)', 'rgb(127, 127, 127)',
                              'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
 
-    def anchors_to_contour(self):
-        x_plus_arr = self.low_dim_anchors.copy()
-        x_plus_arr[:, 0] = self.low_dim_anchors[:, 0] + (self.anchors_radius if self.radius_q is not None else 0.01)
-        x_minus_arr = self.low_dim_anchors.copy()
-        x_minus_arr[:, 0] = self.low_dim_anchors[:, 0] - (self.anchors_radius if self.radius_q is not None else 0.01)
-        y_plus_arr = self.low_dim_anchors.copy()
-        y_plus_arr[:, 1] = self.low_dim_anchors[:, 1] + (self.anchors_radius if self.radius_q is not None else 0.01)
-        y_minus_arr = self.low_dim_anchors.copy()
-        y_minus_arr[:, 1] = self.low_dim_anchors[:, 1] - (self.anchors_radius if self.radius_q is not None else 0.01)
+    def get_contour_df(self):
+        low_dim_arr = self.low_dim_anchors if not self.reduce_all_points else self.low_dim_points
+        x_plus_arr = low_dim_arr.copy()
+        x_plus_arr[:, 0] = low_dim_arr[:, 0] + (self.anchors_radius if self.radius_q is not None else 0.01)
+        x_minus_arr = low_dim_arr.copy()
+        x_minus_arr[:, 0] = low_dim_arr[:, 0] - (self.anchors_radius if self.radius_q is not None else 0.01)
+        y_plus_arr = low_dim_arr.copy()
+        y_plus_arr[:, 1] = low_dim_arr[:, 1] + (self.anchors_radius if self.radius_q is not None else 0.01)
+        y_minus_arr = low_dim_arr.copy()
+        y_minus_arr[:, 1] = low_dim_arr[:, 1] - (self.anchors_radius if self.radius_q is not None else 0.01)
         if self.n_components > 2:
-            z_plus_arr = self.low_dim_anchors.copy()
-            z_plus_arr[:, 2] = self.low_dim_anchors[:, 2] + (self.anchors_radius if self.radius_q is not None else 0.01)
-            z_minus_arr = self.low_dim_anchors.copy()
-            z_minus_arr[:, 2] = self.low_dim_anchors[:, 2] - (self.anchors_radius if self.radius_q is not None else 0.01)
-        anchors_radius = np.concatenate([self.low_dim_anchors, x_plus_arr, x_minus_arr, y_plus_arr, y_minus_arr])
+            z_plus_arr = low_dim_arr.copy()
+            z_plus_arr[:, 2] = low_dim_arr[:, 2] + (self.anchors_radius if self.radius_q is not None else 0.01)
+            z_minus_arr = low_dim_arr.copy()
+            z_minus_arr[:, 2] = low_dim_arr[:, 2] - (self.anchors_radius if self.radius_q is not None else 0.01)
+        anchors_radius = np.concatenate([low_dim_arr, x_plus_arr, x_minus_arr, y_plus_arr, y_minus_arr])
         if self.n_components > 2:
             anchors_radius = np.concatenate([anchors_radius, z_plus_arr, z_minus_arr])
         n_points_per_anchor = 1 + self.n_components * 2
         labels = []
         for i in range(n_points_per_anchor):
-            labels.extend(self.intra_class_anchors_labels)
-
+            if not self.reduce_all_points:
+                labels.extend(self.intra_class_anchors_labels)
+            else:
+                labels.extend(self.y_with_centroids)
         anchors_df = pd.DataFrame(anchors_radius, columns=[self.x_col, self.y_col, 'z'] if self.n_components > 2 else [self.x_col, self.y_col])
         anchors_df[self.label_col] = labels
         return anchors_df
@@ -1709,7 +1744,19 @@ class AMAP:
         return new_poly
 
     @staticmethod
-    def get_concave_hull(points, alpha, spline=False, vis=False, douglas_peucker_tolerance=0.6, smooth_iter=13):
+    def get_concave_hull(points, alpha, remove_outliers_k=None, spline=False, vis=False, douglas_peucker_tolerance=0.6, smooth_iter=13):
+        if remove_outliers_k is not None:
+            print('removing outliers', remove_outliers_k, alpha)
+            clf = LocalOutlierFactor(n_neighbors=remove_outliers_k, contamination='auto')
+            is_outlier = clf.fit_predict(points)
+            is_outlier = is_outlier == -1
+            print('before',points.shape)
+            points = points[~is_outlier]
+            print('after', points.shape)
+            # dist_mat = pairwise_distances(points)
+            # score_each_point = np.mean(dist_mat, axis=1)
+            # is_outlier = score_each_point > np.quantile(score_each_point, remove_outliers_k)
+            # points = points[~is_outlier]
         alpha_shape = alphashape.alphashape(points.tolist(), alpha)
         smooth_shapes = []
         if isinstance(alpha_shape, shapely.geometry.polygon.Polygon):
@@ -1739,7 +1786,7 @@ class AMAP:
         anchors_agg_df_[self.label_col] = self.y_with_centroids[self.anchors_indices]
 
         color = iter(self.DEFAULT_PLOTLY_COLORS)
-        contours_df = self.anchors_to_contour()
+        contours_df = self.get_contour_df()
         fig = make_subplots(
             rows=2, cols=2,
             specs=[[{}, {}],
@@ -1761,7 +1808,9 @@ class AMAP:
 
         for label in sorted(anchors_agg_df_[self.label_col].unique()):
             points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
-            concave_hulls = self.get_concave_hull(points, alpha=self.alpha[label], spline=self.use_spline, vis=True,
+            concave_hulls = self.get_concave_hull(points, alpha=self.alpha[label],
+                                                  remove_outliers_k=self.remove_outliers_k,
+                                                  spline=self.use_spline, vis=True,
                                                   douglas_peucker_tolerance=self.douglas_peucker_tolerance,
                                                   smooth_iter=self.smooth_iter)
 
