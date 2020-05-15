@@ -1,8 +1,7 @@
-# TODO Split dim reduction and plot
-# TODO Remove non-required imports
 # TODO Remove code from global scope
 # TODO don't set sns settings by default
 # TODO delete dead code (plotly)
+# TODO Split dim reduction and plot
 # TODO Split library code from code that uses the library
 # TODO pytest
 # TODO pep8
@@ -28,7 +27,7 @@ from matplotlib.path import Path
 from plotly.subplots import make_subplots
 from sklearn.manifold import MDS, TSNE
 from sklearn.decomposition import PCA, LatentDirichletAllocation
-from sklearn.cluster import AgglomerativeClustering, KMeans, MeanShift, estimate_bandwidth, Birch
+from sklearn.cluster import AgglomerativeClustering, KMeans, Birch
 from sklearn.neighbors import kneighbors_graph
 from scipy.interpolate import splprep, splev
 from shapely.geometry import Point
@@ -36,10 +35,7 @@ from shapely.geometry import Point, Polygon, MultiPolygon
 from scipy.spatial import Voronoi
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import LocalOutlierFactor
-from scipy.sparse import csr_matrix
-import numpy.ma as ma
 from sklearn.neighbors import KNeighborsClassifier
-from matplotlib import offsetbox
 
 import matplotlib
 import matplotlib.pyplot as plt
