@@ -1,5 +1,3 @@
-# TODO Remove code from global scope
-# TODO don't set sns settings by default
 # TODO delete dead code (plotly)
 # TODO Split dim reduction and plot
 # TODO Split library code from code that uses the library
@@ -21,7 +19,13 @@ import shapely
 import seaborn as sns
 import plotly.graph_objects as go
 import imageio
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.lines
 from datetime import datetime
+from matplotlib.transforms import Bbox, TransformedBbox
+from matplotlib.legend_handler import HandlerBase
+from matplotlib.image import BboxImage
 from matplotlib import patches
 from matplotlib.path import Path
 from plotly.subplots import make_subplots
@@ -36,17 +40,6 @@ from scipy.spatial import Voronoi
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.neighbors import KNeighborsClassifier
-
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.lines
-from matplotlib.transforms import Bbox, TransformedBbox
-from matplotlib.legend_handler import HandlerBase
-from matplotlib.image import BboxImage
-
-# Global Configurations
-sns.set_style("darkgrid")
-
 
 class HandlerLineImage(HandlerBase):
 
@@ -1194,8 +1187,8 @@ class ClusterPlot:
                 if self.is_plotly:
                     self.anchors_plot_plotly(i)
                 else:
-                    self.anchors_plot_sns_separate(i, is_first)
-                    # self.anchors_plot_sns(i, is_first, is_last=i==(self.n_iter-1))
+                    # Global Configurations
+                    self._cluster_plot_set_sns(i)
 
         if self.do_animation:
             gif_path = f'{self.output_dir}/animation.gif'
@@ -1204,7 +1197,20 @@ class ClusterPlot:
                     for j in range(5):
                         writer.append_data(imageio.imread(f'{self.output_dir}/iter_{i}_points_anchors_patches_plot.png'))
 
-    def anchors_plot_sns_separate(self, i, is_first):
+    def cluster_plot(self):
+        """
+        Plot Cluster Plot
+        TODO ORM add ability to override constructor params
+        :return:
+        """
+        self._cluster_plot_set_sns(self.n_iter)
+
+    def _cluster_plot_set_sns(self, i):
+        sns.set_style("darkgrid")
+        self._anchors_plot_sns_separate(i)
+        sns.reset_defaults()
+
+    def _anchors_plot_sns_separate(self, i):
         """
         Plot results
         :param i: iteration
@@ -1224,13 +1230,13 @@ class ClusterPlot:
 
         # main plot
         #   plot main plot anyway
-        self._points_anchors_patches_plot(df, i, is_first, show_inner_blobs=False, annotate_images=False)
+        self._points_anchors_patches_plot(df, i, show_inner_blobs=False, annotate_images=False)
         #   if blobs main plot with blobs
         if self.show_inner_blobs:
-            self._points_anchors_patches_plot(df, i, is_first, show_inner_blobs=True, annotate_images=False)
+            self._points_anchors_patches_plot(df, i, show_inner_blobs=True, annotate_images=False)
         #   if images plot
         if self.annotate_images:
-            self._points_anchors_patches_plot(df, i, is_first, show_inner_blobs=False, annotate_images=True)
+            self._points_anchors_patches_plot(df, i, show_inner_blobs=False, annotate_images=True)
 
         # matrices
         #   if label level plot
@@ -1369,7 +1375,7 @@ class ClusterPlot:
         if self.show_fig:
             plt.show()
 
-    def _points_anchors_patches_plot(self, df, i, is_first, show_inner_blobs, annotate_images):
+    def _points_anchors_patches_plot(self, df, i, show_inner_blobs, annotate_images):
         # fig, ax = plt.subplots(figsize=(14, 10))
         # TODO ORM figsize parameter
         fig, ax = plt.subplots(figsize=(21, 15))
@@ -1406,13 +1412,12 @@ class ClusterPlot:
                         horizontalalignment='center', size='medium',
                         color='black', weight='semibold')
         # ax.set_title(f'iter{i}')
-        if is_first:
-            minx, maxx = self.low_dim_points[:, 0].min(), self.low_dim_points[:, 0].max()
-            marginx = (maxx - minx) * 0.05
-            miny, maxy = self.low_dim_points[:, 1].min(), self.low_dim_points[:, 1].max()
-            marginy = (maxy - miny) * 0.05
-            xlim = (minx - marginx, maxx + marginx)
-            ylim = (miny - marginy, maxy + marginy)
+        minx, maxx = self.low_dim_points[:, 0].min(), self.low_dim_points[:, 0].max()
+        marginx = (maxx - minx) * 0.05
+        miny, maxy = self.low_dim_points[:, 1].min(), self.low_dim_points[:, 1].max()
+        marginy = (maxy - miny) * 0.05
+        xlim = (minx - marginx, maxx + marginx)
+        ylim = (miny - marginy, maxy + marginy)
 
         # Add patches
         if self.show_polygons:
@@ -1468,6 +1473,9 @@ class ClusterPlot:
                         if polygon.contains(p) or polygon.intersects(p):
                             points.append(anchor)
                     # handle regions with one or two points
+                    if len(points) == 0:
+                        self.logger.debug(f'all points of label {label} are outside the concave hull -> no Voroni skipping')
+                        continue
                     if len(points) < 3:
                         for i in range(len(points)):
                             point = points[i]
