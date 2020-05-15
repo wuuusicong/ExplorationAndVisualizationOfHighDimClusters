@@ -569,7 +569,7 @@ class AMAP:
                     # fig.write_image(file_name)
                     fig.savefig(f'relaxation_images/iter{i}.png')
                 plt.close()
-                # AMAP.vis_2d(df, 'x', 'y', 'label', 'clusters', f'iter{i}', f'relaxation_images/iter{i}.png')
+                # ClusterPlot.vis_2d(df, 'x', 'y', 'label', 'clusters', f'iter{i}', f'relaxation_images/iter{i}.png')
 
     @staticmethod
     def vis_2d(_df, _x, _y, _color, _style, _title='', file_name=''):
@@ -582,7 +582,7 @@ class AMAP:
 
 
         # fig = go.Figure()
-        # color = iter(AMAP.DEFAULT_PLOTLY_COLORS)
+        # color = iter(ClusterPlot.DEFAULT_PLOTLY_COLORS)
         # for y in sorted(_df[_y].unique()):
         #     c = next(color)
         #     fig.add_trace(go.Scatter(x=_df[_df[_y] == y][_x].values, y=_df[_df[_y]==y][_y].values, mode='markers',

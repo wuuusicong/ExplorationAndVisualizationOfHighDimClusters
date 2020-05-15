@@ -1,13 +1,16 @@
-# TODO AMAP to ClusterPlot
 # TODO Print to logging
 # TODO Documentation
 # TODO Split dim reduction and plot
+# TODO Split library code from code that uses the library
 # TODO Remove non-required imports
 # TODO Remove code from global scope
 # TODO don't set sns settings by default
 # TODO delete dead code (plotly)
 # TODO pytest
 # TODO pep8
+# TODO Examples only 3D and MNIST without sampling
+# TODO Auto choose birch threshold
+# TODO Auto choose LOF
 
 import os
 import numpy as np
@@ -85,7 +88,7 @@ def check_greater_than_zero(arg, arg_name):
         raise Exception(f'{arg_name} must be greater than 0')
 
 
-class AMAP:
+class ClusterPlot:
     def __init__(self, n_components: int = 2, anchors_method: str = 'birch', n_intra_anchors: int = None,
                  birch_threshold: float = 0.3, birch_branching_factor: int = None,
                  dim_reduction_algo: str = 'umap', supervised: bool = False, umap_n_neighbors: int = 15,
@@ -284,9 +287,9 @@ class AMAP:
         self.batch_size = batch_size
         self.stop_criteria = stop_criteria
         if loss == 'Linf':
-            self.loss_func = AMAP.l_inf_loss
+            self.loss_func = ClusterPlot.l_inf_loss
         elif loss == 'mse':
-            self.loss_func = AMAP.mse_loss
+            self.loss_func = ClusterPlot.mse_loss
         else:
             raise Exception(f'Unsupported loss {loss}')
         self.loss = loss
@@ -815,7 +818,7 @@ class AMAP:
 
                 vor = Voronoi(points)
 
-                regions, vertices = AMAP.voronoi_finite_polygons_2d(vor)
+                regions, vertices = ClusterPlot.voronoi_finite_polygons_2d(vor)
 
                 mask = polygon
                 for region in regions:
@@ -1273,7 +1276,7 @@ class AMAP:
                     # Save just the portion _inside_ the second axis's boundaries
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     fig.savefig(f'{self.output_dir}/{matrix_key}_iter_{iteration}.png',
-                                bbox_inches=AMAP.expand_matplotlib_bbox(extent, 2.5, 2.5))
+                                bbox_inches=ClusterPlot.expand_matplotlib_bbox(extent, 2.5, 2.5))
 
         if not self.every_matrix_in_single_plot:
             if self.save_fig:
@@ -1534,7 +1537,7 @@ class AMAP:
                     points = np.array(points)
                     vor = Voronoi(points)
 
-                    regions, vertices = AMAP.voronoi_finite_polygons_2d(vor)
+                    regions, vertices = ClusterPlot.voronoi_finite_polygons_2d(vor)
 
                     mask = polygon
                     for region in regions:
@@ -1710,7 +1713,7 @@ class AMAP:
     def smooth_poly_Chaikins_corner_cutting_iter(poly, iteration=1):
         new_poly = poly[:]
         for i in range(iteration):
-            new_poly = AMAP.smooth_poly_Chaikins_corner_cutting(new_poly, True)
+            new_poly = ClusterPlot.smooth_poly_Chaikins_corner_cutting(new_poly, True)
         return new_poly
 
     @staticmethod
@@ -1767,8 +1770,8 @@ class AMAP:
             x, y = shape.exterior.coords.xy
             if not spline:
                 if vis:
-                    smooth_shape = np.array(AMAP.smooth_poly_Chaikins_corner_cutting_iter(
-                                        AMAP.smooth_poly_Douglas_Peucker(list(zip(x, y)), douglas_peucker_tolerance),
+                    smooth_shape = np.array(ClusterPlot.smooth_poly_Chaikins_corner_cutting_iter(
+                                        ClusterPlot.smooth_poly_Douglas_Peucker(list(zip(x, y)), douglas_peucker_tolerance),
                         iteration=smooth_iter))
                 else:
                     smooth_shape = np.array(list(zip(x, y)))

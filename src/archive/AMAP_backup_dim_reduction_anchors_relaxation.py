@@ -435,7 +435,7 @@ class AMAP:
         ax.set_xlim((-0.2, 0.2))
         ax.set_ylim((-0.2, 0.2))
         # fig = go.Figure()
-        # color = iter(AMAP.DEFAULT_PLOTLY_COLORS)
+        # color = iter(ClusterPlot.DEFAULT_PLOTLY_COLORS)
         # for y in sorted(_df[_y].unique()):
         #     c = next(color)
         #     fig.add_trace(go.Scatter(x=_df[_df[_y] == y][_x].values, y=_df[_df[_y]==y][_y].values, mode='markers',

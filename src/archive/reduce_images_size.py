@@ -17,7 +17,7 @@ warnings.simplefilter('ignore', category=NumbaPendingDeprecationWarning)
 warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
 
 from DataSetFactory import DataSet
-from AMAP import AMAP
+from ClusterPlot import ClusterPlot
 
 df = pd.read_csv('../../data/FashionMNIST/train.csv')
 feature_cols = [f'Pixel{i:03}' for i in range(784)]
