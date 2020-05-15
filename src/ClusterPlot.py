@@ -1,11 +1,10 @@
-# TODO Print to logging
 # TODO Documentation
 # TODO Split dim reduction and plot
-# TODO Split library code from code that uses the library
 # TODO Remove non-required imports
 # TODO Remove code from global scope
 # TODO don't set sns settings by default
 # TODO delete dead code (plotly)
+# TODO Split library code from code that uses the library
 # TODO pytest
 # TODO pep8
 # TODO Examples only 3D and MNIST without sampling
@@ -13,6 +12,7 @@
 # TODO Auto choose LOF
 
 import os
+import logging
 import numpy as np
 import pandas as pd
 import random
@@ -99,7 +99,7 @@ class ClusterPlot:
                  top_greedy: int = 1, magnitude_step: bool = False, n_iter: int = 10, batch_size: int = 1,
                  stop_criteria: float = 0.00001, loss: str = 'Linf', only_inter_relations: bool = False,
                  learning_rate: float = None, mask_sparse_subcluster: int = None, random_points_method: str = 'voronoi',
-                 class_to_label: dict = None, random_state: int = None, n_jobs: int = None, verbose: bool = True,
+                 class_to_label: dict = None, random_state: int = None, n_jobs: int = None, verbose: int = logging.INFO,
                  dataset: str = 'default', show_fig: bool = True, save_fig: bool = True, is_plotly: bool = False,
                  do_animation=False, use_spline: bool = False, alpha: float = None, remove_outliers_k: float = None,
                  douglas_peucker_tolerance: float = 0.6,
@@ -165,7 +165,7 @@ class ClusterPlot:
         :param class_to_label: dict mapping from class number to label for visualization purposes
         :param random_state: seed for repruducability
         :param n_jobs: number of jobs to use, not suported for all flow
-        :param verbose: is verbose prinitng or not
+        :param verbose: self.logger level as defined in self.logger module
         :param dataset: directory name corresponding with the dataset, this folder will be the output directory for the
         plots and info
         :param show_fig: show main figure or not
@@ -204,6 +204,15 @@ class ClusterPlot:
         """
         # start with verbose level
         self.verbose = verbose
+        self.logger = logging.getLogger(f'ClusterPlot-{np.random.randint(0, 65534)}')
+        self.logger.setLevel(self.verbose)
+        ch = logging.StreamHandler()
+        ch.setLevel(self.verbose)
+        # create formatter and add it to the handlers
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        ch.setFormatter(formatter)
+        # add the handlers to the logger
+        self.logger.addHandler(ch)
 
         # Sanity checks
         if n_components > 2:
@@ -226,7 +235,7 @@ class ClusterPlot:
 
         if anchors_method in ['birch']:
             if n_intra_anchors is not None:
-                self.print_verbose(f'Anchors method {anchors_method} does not require number of anchors '
+                self.logger.warning(f'Anchors method {anchors_method} does not require number of anchors '
                                    f'but n_intra_anchors is {n_intra_anchors}')
         else:
             if not n_intra_anchors:
@@ -389,12 +398,6 @@ class ClusterPlot:
             attrs="\n".join("{}={!r}".format(k, v) for k, v in self.__dict__.items()),
         )
 
-    def print_verbose(self, msg, verbose=False):
-        if verbose:
-            print(msg)
-        elif self.verbose:
-            print(msg)
-
     def fit(self, X, y):
         raise NotImplementedError()
 
@@ -460,7 +463,7 @@ class ClusterPlot:
         :param y:
         :return:
         """
-        self.print_verbose(f'finding intra class anchors using {self.anchors_method}')
+        self.logger.info(f'finding intra class anchors using {self.anchors_method}')
         if self.anchors_method == 'agglomerative':
             cm = AgglomerativeClustering(n_clusters=self.n_intra_anchors)
         elif self.anchors_method == 'kmeans':
@@ -679,7 +682,7 @@ class ClusterPlot:
                             self.cand_samples_to_plot[anchor] = dict()
                         self.cand_samples_to_plot[anchor]['pure'] = sample_index
                         self.cand_samples_to_plot[anchor]['src_label'] = src_label
-                        print(f'Adding anchor {anchor} to label {src_label} = {self.pure_anchor_per_label[src_label]}')
+                        self.logger.debug(f'Adding anchor {anchor} to label {src_label} = {self.pure_anchor_per_label[src_label]}')
                         self.pure_anchor_per_label[src_label].append(anchor)
                         if len(self.pure_anchor_per_label[src_label]) == 10:
                             break
@@ -748,28 +751,28 @@ class ClusterPlot:
         else:
             raise Exception(f'Dimension reduction algorithm {self.dim_reduction_algo} is not supported')
         if self.supervised:
-            self.print_verbose('Supervised Dim Reduction')
+            self.logger.info('Supervised Dim Reduction')
             if self.reduce_all_points:
-                self.print_verbose('Dim Reduction all points')
+                self.logger.info('Dim Reduction all points')
                 self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids,
                                                                             self.y_with_centroids)
             else:
-                self.print_verbose('Dim Reduction only anchors')
+                self.logger.info('Dim Reduction only anchors')
                 self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(self.X_with_centroids[self.anchors_indices],
                                                                              self.y_with_centroids[self.anchors_indices])
         else:
-            self.print_verbose('UnSupervised Dim Reduction')
+            self.logger.info('UnSupervised Dim Reduction')
             if self.reduce_all_points:
-                self.print_verbose('Dim Reduction all points')
+                self.logger.info('Dim Reduction all points')
                 self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids)
             else:
-                self.print_verbose('Dim Reduction only anchors')
+                self.logger.info('Dim Reduction only anchors')
                 self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(self.X_with_centroids[self.anchors_indices])
         if self.reduce_all_points:
             self.low_dim_anchors = self.low_dim_points[self.anchors_indices]
         else:
             # generate random points for each anchor in the low dimension within radius
-            self.print_verbose(f'Dim Reduction only anchors - generate random points in low dim per {self.uniform_points_per}')
+            self.logger.info(f'Dim Reduction only anchors - generate random points in low dim per {self.uniform_points_per}')
 
             # Support random points in Voronoi regions
             label_to_contour_df = dict()
@@ -796,16 +799,7 @@ class ClusterPlot:
                     if polygon.contains(p) or polygon.intersects(p):
                         points.append(anchor)
                     else:
-                        pass
-                        # TODO ORM change verbosity
-                        # self.print_verbose(f'ANCHOR: {anchor_index} - did I miss points? type({type(polygon)})')
-                        # self.print_verbose(polygon)
-                        # self.print_verbose(p)
-                        # self.print_verbose('===============')
-                        # x, y = polygon.exterior.xy
-                        # plt.plot([anchor[0]], [anchor[1]], 'bo')
-                        # plt.plot(x, y)
-                        # plt.show()
+                        self.logger.debug(f'ANCHOR: {anchor_index}: {p} is outside of polygon ({type(polygon)}): {polygon}. Skipping anchor')
                 # handle regions with one or two points
                 if len(points) < 3:
                     for i in range(len(points)):
@@ -827,7 +821,7 @@ class ClusterPlot:
                     shape[0] += 1
                     p = Polygon(np.append(polygon_region, polygon_region[0]).reshape(*shape)).intersection(mask)
                     if p.is_empty or isinstance(p, Point):
-                        self.print_verbose('Warning intersection of voronoy with polygon is empty or in single point')
+                        self.logger.warning('Intersection of voronoy with polygon is empty or in single point')
                     self.anchor_voronoi_regions.append(p)
                     self.anchor_voronoi_regions_label.append(label)
 
@@ -1004,7 +998,7 @@ class ClusterPlot:
             if _poly is None:
                 # This is probably sub-cluster with one point that is outlier, so it is outside the polygon and it is
                 # ok to return the anchor
-                self.print_verbose(f'anchor {anchor_index} has no voronoi region, why? returning anchor instead of random point - probably not error')
+                self.logger.debug(f'anchor {anchor_index} has no voronoi region. This is sub-cluster with one point that is outlier, so it is outside the polygon and it is returning anchor instead of random point')
                 return [self.low_dim_anchors[anchor_index]]
             minx, miny, maxx, maxy = _poly.bounds
             # generate random points within the bounding box
@@ -1093,10 +1087,10 @@ class ClusterPlot:
 
     def relax_anchor_cluster(self, src_anchor_index, target_anchor_index, direction, magnitude):
         if self.mask_sparse_subcluster is not None and self.anchors_density[src_anchor_index] < self.mask_sparse_subcluster:
-            self.print_verbose(f'SKIPPING RELAXATION FOR src {src_anchor_index} ({self.anchors_density[src_anchor_index]}) '
+            self.logger.debug(f'Skipping relaxation of src {src_anchor_index} ({self.anchors_density[src_anchor_index]}) '
                   f'and target {target_anchor_index} ({self.anchors_density[target_anchor_index]})')
             return
-        self.print_verbose(
+        self.logger.debug(
             f'src: {src_anchor_index} target {target_anchor_index} dir {direction} density {self.anchors_density[src_anchor_index]}'
             f'loss: {self.inter_class_relations[src_anchor_index][target_anchor_index] - self.inter_class_relations_low_dim[src_anchor_index][target_anchor_index] }')
         src_anchor, target_anchor = self.low_dim_anchors[src_anchor_index], self.low_dim_anchors[target_anchor_index]
@@ -1110,7 +1104,7 @@ class ClusterPlot:
             magnitude = 1
         if self.learning_rate is not None:
             magnitude = magnitude * self.learning_rate
-        # print(f'update src {src_anchor_index} to target {target_anchor_index} dir {direction} magnitude {magnitude} direction_vec {direction_vec}')
+        self.logger.debug(f'update src {src_anchor_index} to target {target_anchor_index} dir {direction} magnitude {magnitude} direction_vec {direction_vec}')
         self.low_dim_points[label_cluster_indices] = self.low_dim_points[label_cluster_indices] + direction * magnitude * direction_vec
         # update also the low dim anchors
         self.low_dim_anchors[src_anchor_index] = self.low_dim_anchors[src_anchor_index] + direction * magnitude * direction_vec
@@ -1124,10 +1118,10 @@ class ClusterPlot:
             inter_class_relations, inter_class_relations_low_dim = self.mask_inter_class_relations()
             loss = self.loss_func(inter_class_relations, inter_class_relations_low_dim)
             if loss < self.stop_criteria:
-                self.print_verbose(f'loss {loss} < stopping criteria {self.stop_criteria} nothing to do')
+                self.logger.info(f'loss {loss} < stopping criteria {self.stop_criteria} nothing to do')
                 return
             self.losses.append(loss)
-            self.print_verbose(f'Starting iteration {i+1} loss = {loss}')
+            self.logger.info(f'Starting iteration {i+1} loss = {loss}')
             is_first = True
             for j in range(self.batch_size):
                 src_anchor_indices, target_anchor_indices, directions, magnitudes = self.get_top_anchors_to_relax()
@@ -1488,8 +1482,7 @@ class ClusterPlot:
                 for concave_hull in concave_hulls:
                     # Skip polygons with very small area that will appear as dots
                     if Polygon(concave_hull).area < self.skip_polygons_with_area:
-                        # TODO ORM change verbosity
-                        # self.print_verbose(f'Skipping polygon of label {label} with area {Polygon(concave_hull).area}')
+                        self.logger.debug(f'Skipping polygon of label {label} with area {Polygon(concave_hull).area}')
                         continue
                     coords = concave_hull
                     line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(coords) - 2) + [Path.CLOSEPOLY]
@@ -1553,7 +1546,7 @@ class ClusterPlot:
                         for p in list(polygons):
                             # skip anchors outside the polygon due to simplification
                             if p.exterior is None:
-                                self.print_verbose(f'Skipping voronoi of anchor of label {label} since it is outside '
+                                self.logger.debug(f'Skipping voronoi of anchor of label {label} since it is outside '
                                                    f'of polygon after simplification')
                                 continue
                             x, y = p.exterior.coords.xy
@@ -1569,7 +1562,7 @@ class ClusterPlot:
                 palette = itertools.cycle(sns.color_palette())
                 for outlier_label, anchor in enumerate(self.overlapped_anchor_per_label):
                     if anchor is None:
-                        print(f'Missing outlier for label {outlier_label}')
+                        self.logger.info(f'Missing outlier for label {outlier_label}')
                         continue
                     c = next(palette)
                     outlier = self.cand_samples_to_plot[anchor]['outlier']
@@ -1578,7 +1571,7 @@ class ClusterPlot:
                     src_label = self.class_to_label[self.cand_samples_to_plot[anchor]['src_label']]
                     target_label = self.class_to_label[self.cand_samples_to_plot[anchor]['target_label']]
                     if outlier_is_valid:
-                        self.print_verbose(
+                        self.logger.info(
                             f'anchor {anchor} outlier {outlier} src_label {src_label} target_label {target_label}, path: '
                             f'\n{self.orig_images[outlier] if self.orig_images else outlier}')
                         sns.scatterplot(x=[self.low_dim_anchors[anchor][0]], y=[self.low_dim_anchors[anchor][1]], c=[c],
@@ -1591,7 +1584,7 @@ class ClusterPlot:
                         # ax.add_artist(imagebox)
 
                     else:
-                        self.print_verbose(
+                        self.logger.info(
                             f'anchor {anchor} outlier {outlier} src_label {src_label} target_label {target_label} is not valid')
 
                 # for anchor in self.pure_anchor_per_label:
@@ -1614,7 +1607,7 @@ class ClusterPlot:
                 handler_map = dict()
                 for pure_label, anchors in enumerate(self.pure_anchor_per_label):
                     if not anchors:
-                        print(f'Missing pure for label {pure_label}')
+                        self.logger.info(f'Missing pure for label {pure_label}')
                         continue
                     for anchor in anchors:
                         pure = self.cand_samples_to_plot[anchor]['pure']
@@ -1622,10 +1615,10 @@ class ClusterPlot:
                         if self.orig_images:
                                 # probably doesn't work now
                             img_path = self.orig_images[pure]
-                            self.print_verbose(f'src_label: {src_label} pure path: \n{img_path}')
+                            self.logger.info(f'src_label: {src_label} pure path: \n{img_path}')
                             handler_map[current_handles[src_label+1]] = HandlerLineImage(img_path)
                         else:
-                            self.print_verbose(f'src_label: {src_label} pure path: \n{pure}')
+                            self.logger.info(f'src_label: {src_label} pure path: \n{pure}')
 
                 if self.orig_images:
                     lgd = plt.legend(current_handles[1:num_labels + 1], current_labels[1:num_labels + 1],
@@ -1749,13 +1742,13 @@ class ClusterPlot:
     @staticmethod
     def get_concave_hull(points, alpha, remove_outliers_k=None, spline=False, vis=False, douglas_peucker_tolerance=0.6, smooth_iter=13):
         if remove_outliers_k is not None:
-            print('removing outliers', remove_outliers_k, alpha)
+            self.logger.debug('removing outliers', remove_outliers_k, alpha)
             clf = LocalOutlierFactor(n_neighbors=remove_outliers_k, contamination='auto')
             is_outlier = clf.fit_predict(points)
             is_outlier = is_outlier == -1
-            print('before',points.shape)
+            self.logger.debug('before',points.shape)
             points = points[~is_outlier]
-            print('after', points.shape)
+            self.logger.debug('after', points.shape)
             # dist_mat = pairwise_distances(points)
             # score_each_point = np.mean(dist_mat, axis=1)
             # is_outlier = score_each_point > np.quantile(score_each_point, remove_outliers_k)
