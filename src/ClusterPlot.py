@@ -1,4 +1,3 @@
-# TODO Documentation
 # TODO Split dim reduction and plot
 # TODO Remove non-required imports
 # TODO Remove code from global scope
@@ -8,6 +7,7 @@
 # TODO pytest
 # TODO pep8
 # TODO Examples only 3D and MNIST without sampling
+# TODO Readme
 # TODO Auto choose birch threshold
 # TODO Auto choose LOF
 
@@ -399,14 +399,22 @@ class ClusterPlot:
         )
 
     def fit(self, X, y):
-        raise NotImplementedError()
+        """
+        Not implemented
+        :param X: Ignore
+        :param y: Ignore
+        :return:
+        """
+        raise NotImplementedError('Use fit_transform')
 
     def fit_transform(self, X, y):
         """
         labels are expected to be 0,1,2,...
-        :param X:
-        :param y:
-        :return:
+        :param X: {array-like, sparse matrix} of shape (n_samples, n_features)
+            Training data
+        :param y: array-like of shape (n_samples,) or (n_samples, n_targets)
+            Target values. Will be cast to X's dtype if necessary
+        :return: low dim anchors
         """
         # sanity check
         if not isinstance(X, np.ndarray):
@@ -459,9 +467,12 @@ class ClusterPlot:
 
     def _get_intra_class_anchors(self, X, y):
         """
-        :param X:
-        :param y:
-        :return:
+        Perform Clustering for each class to get sub-clusters and anchors
+        :param X: {array-like, sparse matrix} of shape (n_samples, n_features)
+            Training data
+        :param y: array-like of shape (n_samples,) or (n_samples, n_targets)
+            Target values. Will be cast to X's dtype if necessary
+        :return: None
         """
         self.logger.info(f'finding intra class anchors using {self.anchors_method}')
         if self.anchors_method == 'agglomerative':
@@ -521,6 +532,14 @@ class ClusterPlot:
         self._calc_high_dim_clusters_properties(df, self.label_col, self.cluster_col, intra_centroids_df)
 
     def _calc_high_dim_clusters_properties(self, df, label_col, cluster_col, intra_centroids_df):
+        """
+        Calc density and radius of each subcluster in high-dim
+        :param df: data pandas Dataframe
+        :param label_col: label column
+        :param cluster_col: cluster column
+        :param intra_centroids_df: anchors dataframe
+        :return: None
+        """
         df = df.copy()
         intra_centroids_df = intra_centroids_df.copy()
         # Density
@@ -539,9 +558,20 @@ class ClusterPlot:
         self.anchors_radius = radius_df.values
 
     def _build_knng(self, X):
+        """
+        Build K-Nearest-Neighbors-Graph
+        :param X: Traning data
+        :return: None
+        """
         self.knng = kneighbors_graph(X, self.k, mode='distance', n_jobs=self.n_jobs)
 
     def _sample_index_to_anchor(self, label, cluster):
+        """
+        Convert sample index to anchor index
+        :param label: label of sample
+        :param cluster: sub-cluster of sample
+        :return: anchor index
+        """
         anchor_index = 0
         for i in range(label):
             anchor_index += self.num_clusters_each_label[i]
@@ -549,6 +579,12 @@ class ClusterPlot:
         return anchor_index
 
     def anchor_to_label_cluster(self, anchor_index, visualization=False):
+        """
+        Get label and sub-cluster by anchor_index
+        :param anchor_index: index of anchor
+        :param visualization: for vis or not
+        :return: Tuple (label, sub-cluster)
+        """
         anchors_count = 0
         for i in range(len(self.num_clusters_each_label)-1):
             if anchors_count <= anchor_index < anchors_count + self.num_clusters_each_label[i]:
@@ -564,9 +600,9 @@ class ClusterPlot:
 
     def calc_proximity_matrix(self, dim):
         """
-
+        Calc proximity matrix
         :param dim: high or low dim
-        :return:
+        :return: None
         """
         if dim == 'high':
             anchors = self.intra_class_anchors
@@ -607,8 +643,8 @@ class ClusterPlot:
 
     def _calc_inter_class_relations(self):
         """
-
-        :return:
+        Calc proximity and overlap
+        :return: None
         """
         self.inter_class_relations = np.zeros((len(self.intra_class_anchors_labels),
                                                len(self.intra_class_anchors_labels)))
@@ -689,8 +725,8 @@ class ClusterPlot:
 
     def calc_low_dim_inter_class_relations(self):
         """
-
-        :return:
+        Calc low dim proximity and overlap
+        :return: None
         """
         knng = kneighbors_graph(self.low_dim_points, self.k, mode='distance', n_jobs=self.n_jobs)
         self.inter_class_relations_low_dim = np.zeros((len(self.intra_class_anchors_labels),
@@ -731,8 +767,7 @@ class ClusterPlot:
 
     def _dim_reduction(self):
         """
-        NOTE that at this point I will use a=1 and b=1 need to read and understand implications
-        since UMAP does curve fit to a and b based on the min_dist hyper-parameter
+        Reduce dimension of points or anchors
         :return:
         """
         if self.dim_reduction_algo == 't-sne':
@@ -832,7 +867,6 @@ class ClusterPlot:
             #     plt.plot(points[:, 0], points[:, 1], 'ko')
             # plt.title("Clipped Voronois")
             # plt.show()
-
 
             low_dim_points = [None] * self.X_with_centroids.shape[0]
             from tqdm import tqdm
@@ -937,6 +971,13 @@ class ClusterPlot:
                              i,
                              low_dim_points,
                              concave_hulls):
+        """
+        Generate virtual random points in low dim after dim reduction
+        :param i: sample index
+        :param low_dim_points: points in low dim
+        :param concave_hulls: voronoi shapes
+        :return: None
+        """
         anchor_index = self._sample_index_to_anchor(self.y_with_centroids[i], self.clusters[i])
         if i in self.anchors_indices:
             low_dim_points[i] = self.low_dim_anchors[self.anchors_indices.index(i)]
@@ -981,8 +1022,13 @@ class ClusterPlot:
             else:
                 raise Exception(f'Unsupported uniform_points_per: {self.uniform_points_per}')
 
-
     def random_points_per_cluster(self, anchor_index, number_of_random_points=None):
+        """
+        Generate virtual random points per subcluster
+        :param anchor_index: anchor index
+        :param number_of_random_points: how many points to generate
+        :return: np array of random points
+        """
         if number_of_random_points is not None:
             number_of_random_points = self.anchors_density[anchor_index]
 
@@ -1045,7 +1091,10 @@ class ClusterPlot:
         return np.square(X - Y).mean()
 
     def get_top_anchors_to_relax(self):
-
+        """
+        Get top greedy anchors with the highest loss value to perform relaxatio on them
+        :return: Tuple (np array of anchors indices to relax, np array of target anchors indices, np array of directions, np array of magnitudes)
+        """
         inter_class_relations, inter_class_relations_low_dim = self.mask_inter_class_relations()
 
         diff_mat = inter_class_relations - inter_class_relations_low_dim
@@ -1069,6 +1118,10 @@ class ClusterPlot:
         return src_anchor_indices[:self.top_greedy], target_anchor_indices[:self.top_greedy], directions[:self.top_greedy], magnitudes[:self.top_greedy]
 
     def mask_inter_class_relations(self):
+        """
+        Mask out from overlap matrix relations between sub-clusters in the same label
+        :return:
+        """
         inter_class_relations = self.inter_class_relations
         inter_class_relations_low_dim = self.inter_class_relations_low_dim
         if self.mask_relation_in_same_label:
@@ -1086,6 +1139,14 @@ class ClusterPlot:
         return inter_class_relations, inter_class_relations_low_dim
 
     def relax_anchor_cluster(self, src_anchor_index, target_anchor_index, direction, magnitude):
+        """
+        Perform one step of relaxation on one anchor
+        :param src_anchor_index: anchor to relax
+        :param target_anchor_index: target anchor to relax in his direction
+        :param direction: positive or negative
+        :param magnitude: in which magnitude to relax
+        :return: None
+        """
         if self.mask_sparse_subcluster is not None and self.anchors_density[src_anchor_index] < self.mask_sparse_subcluster:
             self.logger.debug(f'Skipping relaxation of src {src_anchor_index} ({self.anchors_density[src_anchor_index]}) '
                   f'and target {target_anchor_index} ({self.anchors_density[target_anchor_index]})')
@@ -1110,6 +1171,10 @@ class ClusterPlot:
         self.low_dim_anchors[src_anchor_index] = self.low_dim_anchors[src_anchor_index] + direction * magnitude * direction_vec
 
     def relaxation(self):
+        """
+        Perform relaxation/optimization
+        :return: None
+        """
         saved_iterations_for_gif = []
         for i in range(self.n_iter):
             self.calc_low_dim_inter_class_relations()
@@ -1144,6 +1209,12 @@ class ClusterPlot:
                         writer.append_data(imageio.imread(f'{self.output_dir}/iter_{i}_points_anchors_patches_plot.png'))
 
     def anchors_plot_sns_separate(self, i, is_first):
+        """
+        Plot results
+        :param i: iteration
+        :param is_first: is first iteration of relaxation
+        :return: None
+        """
         df = pd.DataFrame(data=self.low_dim_points, columns=[self.x_col, self.y_col])
         df[self.label_col] = self.y_with_centroids
         df[self.cluster_col] = self.clusters
@@ -1157,24 +1228,24 @@ class ClusterPlot:
 
         # main plot
         #   plot main plot anyway
-        self.points_anchors_patches_plot(df, i, is_first, show_inner_blobs=False, annotate_images=False)
+        self._points_anchors_patches_plot(df, i, is_first, show_inner_blobs=False, annotate_images=False)
         #   if blobs main plot with blobs
         if self.show_inner_blobs:
-            self.points_anchors_patches_plot(df, i, is_first, show_inner_blobs=True, annotate_images=False)
+            self._points_anchors_patches_plot(df, i, is_first, show_inner_blobs=True, annotate_images=False)
         #   if images plot
         if self.annotate_images:
-            self.points_anchors_patches_plot(df, i, is_first, show_inner_blobs=False, annotate_images=True)
+            self._points_anchors_patches_plot(df, i, is_first, show_inner_blobs=False, annotate_images=True)
 
         # matrices
         #   if label level plot
         if self.show_label_level_plots:
-            self.matrices_plot(label_level=True, iteration=i)
+            self._matrices_plot(label_level=True, iteration=i)
         #   if anchors level plot
         if self.show_anchor_level_plot:
-            self.matrices_plot(label_level=False, iteration=i)
+            self._matrices_plot(label_level=False, iteration=i)
 
         # loss
-        self.loss_plot()
+        self._loss_plot()
 
 
     @staticmethod
@@ -1191,7 +1262,13 @@ class ClusterPlot:
         a = np.array([[-deltaw, -deltah], [deltaw, deltah_top]])
         return Bbox(extent._points + a)
 
-    def matrices_plot(self, label_level, iteration):
+    def _matrices_plot(self, label_level, iteration):
+        """
+        Plot overlap and proximity matrices
+        :param label_level: label level or sub-cluster level plots
+        :param iteration: iteration number
+        :return:
+        """
         a_min = 0
         a_max = 0.1
         rows = ['Overlap', 'Proximity']
@@ -1279,91 +1356,7 @@ class ClusterPlot:
             if self.show_fig:
                 plt.show()
 
-    def high_dim_relations_plot(self, shape, fig, is_last):
-        ax = plt.subplot2grid(shape, (2, 6), colspan=2, rowspan=2)
-        sns.heatmap(self.inter_class_relations, ax=ax, annot=False, square=True, cmap='YlGnBu',
-                    vmin=0, vmax=1, center=0.5,
-                    xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
-                                 range(self.inter_class_relations.shape[0])],
-                    yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
-                                 range(self.inter_class_relations.shape[0])])
-        ax.set_title('High-Dim Overlap')
-
-        if self.save_fig and is_last:
-            # Save just the portion _inside_ the second axis's boundaries
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/high_dim_overlap_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
-        if self.show_fig and is_last:
-            plt.show()
-
-    def high_dim_relations_label_level_plot(self, shape, fig, is_last):
-        ax = plt.subplot2grid(shape, (2, 6), colspan=2, rowspan=2)
-        sns.heatmap(self.inter_class_relations_label_level, ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
-                    vmin=0, vmax=1, center=0.5,
-                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
-                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
-        ax.set_title('High-Dim Label Level Overlap')
-
-        if self.save_fig and is_last:
-            # Save just the portion _inside_ the second axis's boundaries
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/high_dim_overlap_label_level_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
-        if self.show_fig and is_last:
-            plt.show()
-
-    def low_dim_relations_plot(self, shape, fig, is_last):
-        ax = plt.subplot2grid(shape, (0, 6), colspan=2, rowspan=2)
-        sns.heatmap(self.inter_class_relations_low_dim, ax=ax, annot=False, square=True, cmap='YlGnBu',
-                    vmin=0, vmax=1, center=0.5,
-                    xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
-                                 range(self.inter_class_relations.shape[0])],
-                    yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
-                                 range(self.inter_class_relations.shape[0])])
-        ax.set_title('Low-Dim Overlap')
-
-        if self.save_fig and is_last:
-            # Save just the portion _inside_ the second axis's boundaries
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/low_dim_relations_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
-        if self.show_fig and is_last:
-            plt.show()
-
-    def low_dim_relations_label_level_plot(self, shape, fig, is_last):
-        ax = plt.subplot2grid(shape, (0, 6), colspan=2, rowspan=2)
-        sns.heatmap(self.inter_class_relations_low_dim_label_level, ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
-                    vmin=0, vmax=1, center=0.5,
-                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
-                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
-        ax.set_title('Low-Dim Overlap')
-
-        if self.save_fig and is_last:
-            # Save just the portion _inside_ the second axis's boundaries
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/low_dim_overlap_label_level_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
-        if self.show_fig and is_last:
-            plt.show()
-
-    def proximity_matrix_plot(self, shape, fig, is_last, dim):
-        if dim == 'high':
-            ax = plt.subplot2grid(shape, (2, 6), colspan=2, rowspan=2)
-            proximity_matrix = self.high_dim_proximity_matrix
-        else:
-            ax = plt.subplot2grid(shape, (0, 6), colspan=2, rowspan=2)
-            proximity_matrix = self.low_dim_proximity_matrix
-        sns.heatmap(proximity_matrix, ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
-                    vmin=0, vmax=1, center=0.5,
-                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
-                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
-        ax.set_title(f'{dim}-Dim Proximity')
-
-        if self.save_fig and is_last:
-            # Save just the portion _inside_ the second axis's boundaries
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/{dim}_dim_proximity_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
-        if self.show_fig and is_last:
-            plt.show()
-
-    def loss_plot(self):
+    def _loss_plot(self):
         # ax = plt.subplot2grid(shape, (0, 0), colspan=2, rowspan=2)
         fig, ax = plt.subplots(figsize=(7, 5))
         sns.lineplot(x=list(range(len(self.losses))), y=self.losses, ax=ax)
@@ -1380,52 +1373,11 @@ class ClusterPlot:
         if self.show_fig:
             plt.show()
 
-    def loss_heatmap_label_level_plot(self, shape, fig, is_last):
-        # Squared Diff Relations
-        ax = plt.subplot2grid(shape, (2, 0), colspan=2, rowspan=2)
-        a_min = 0
-        a_max = 1
-        sns.heatmap(np.clip(np.square(self.inter_class_relations_label_level - self.inter_class_relations_low_dim_label_level), a_min=a_min,
-                            a_max=a_max),
-                    ax=ax, annot=True, fmt='.2f', square=True, cmap='YlGnBu',
-                    vmin=a_min, vmax=a_max, center=(a_max-a_min)/2,
-                    xticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],
-                    yticklabels=[self.class_to_label[i] for i in sorted(self.class_to_label.keys())],)
-        ax.set_title('Matrix Overlap Diff')
-
-        if self.save_fig and is_last:
-            # Save just the portion _inside_ the second axis's boundaries
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/loss_heatmap_label_level_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
-        if self.show_fig and is_last:
-            plt.show()
-
-    def loss_heatmap_plot(self, shape, fig, is_last):
-        # Squared Diff Relations
-        ax = plt.subplot2grid(shape, (2, 0), colspan=2, rowspan=2)
-        a_min = 0
-        a_max = 0.1
-        sns.heatmap(np.clip(np.square(self.inter_class_relations - self.inter_class_relations_low_dim), a_min=a_min,
-                            a_max=a_max),
-                    ax=ax, annot=False, square=True, cmap='YlGnBu',
-                    vmin=a_min, vmax=a_max, center=(a_max-a_min)/2,
-                    xticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
-                                 range(self.inter_class_relations.shape[0])],
-                    yticklabels=[str(self.anchor_to_label_cluster(i, visualization=True)) for i in
-                                 range(self.inter_class_relations.shape[0])])
-        ax.set_title('Squared Diff Relations')
-
-        if self.save_fig and is_last:
-            # Save just the portion _inside_ the second axis's boundaries
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(f'{self.output_dir}/loss_heatmap_plot.png', bbox_inches=extent.expanded(1.3, 1.3))
-        if self.show_fig and is_last:
-            plt.show()
-
-    def points_anchors_patches_plot(self, df, i, is_first, show_inner_blobs, annotate_images):
+    def _points_anchors_patches_plot(self, df, i, is_first, show_inner_blobs, annotate_images):
         # fig, ax = plt.subplots(figsize=(14, 10))
+        # TODO ORM figsize parameter
         fig, ax = plt.subplots(figsize=(21, 15))
-        filled_markers = tuple(['o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X']*100)
+        filled_markers = tuple(['o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X']*10000)
         hue_order = sorted(df[self.label_col].unique())
         # Plot points
         if self.show_points:
@@ -1667,6 +1619,10 @@ class ClusterPlot:
                              'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
 
     def get_contour_df(self):
+        """
+        Add points with small margin before concave hull calculation to avoid anchors on the edges
+        :return: pandas Dataframe with all points
+        """
         low_dim_arr = self.low_dim_anchors if not self.reduce_all_points else self.low_dim_points
         x_plus_arr = low_dim_arr.copy()
         x_plus_arr[:, 0] = low_dim_arr[:, 0] + (self.anchors_radius if self.radius_q is not None else 0.01)
@@ -1739,8 +1695,17 @@ class ClusterPlot:
             new_poly.append(new_poly[0])
         return new_poly
 
-    @staticmethod
-    def get_concave_hull(points, alpha, remove_outliers_k=None, spline=False, vis=False, douglas_peucker_tolerance=0.6, smooth_iter=13):
+    def get_concave_hull(self, points, alpha, remove_outliers_k=None, spline=False, vis=False, douglas_peucker_tolerance=0.6, smooth_iter=13):
+        """
+        Calculate concave hull of points
+        :param alpha: alpha for alphashape algorithm
+        :param remove_outliers_k: k for LOF algorithm while removing outliers
+        :param spline: use spline - not recommended
+        :param vis: if vis is False skipping smothing operations
+        :param douglas_peucker_tolerance: tolerance for the douglas_peucker_tolerance smoothing algo
+        :param smooth_iter: how many smothing iterations to do with cutting edge corner algorithm
+        :return: list of smoothed shapes of concave hulls
+        """
         if remove_outliers_k is not None:
             self.logger.debug('removing outliers', remove_outliers_k, alpha)
             clf = LocalOutlierFactor(n_neighbors=remove_outliers_k, contamination='auto')
