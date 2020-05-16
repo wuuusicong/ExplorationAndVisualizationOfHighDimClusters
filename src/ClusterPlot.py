@@ -1,4 +1,3 @@
-# TODO Split dim reduction and plot
 # TODO Split library code from code that uses the library
 # TODO pytest
 # TODO pep8
@@ -9,6 +8,7 @@
 
 import os
 import logging
+import itertools
 import numpy as np
 import pandas as pd
 import random
@@ -86,15 +86,16 @@ class ClusterPlot:
                  stop_criteria: float = 0.00001, loss: str = 'Linf', only_inter_relations: bool = False,
                  learning_rate: float = None, mask_sparse_subcluster: int = None, random_points_method: str = 'voronoi',
                  class_to_label: dict = None, random_state: int = None, n_jobs: int = None, verbose: int = logging.INFO,
-                 dataset: str = 'default', show_fig: bool = True, save_fig: bool = True,
+                 dataset: str = 'default', show_fig: bool = True, save_fig: bool = True, figsize: tuple = (21, 15),
                  do_animation=False, use_spline: bool = False, alpha: float = None, remove_outliers_k: float = None,
                  douglas_peucker_tolerance: float = 0.6,
                  smooth_iter: int = 3, skip_polygons_with_area: float = 0.01,
                  mask_relation_in_same_label: bool = True, save_fig_every: int = 1,
-                 show_anchors: bool = False, show_points: bool = False, show_polygons: bool = True,
+                 show_anchors: bool = False, show_points: bool = False, show_blobs: bool = True,
                  show_inner_blobs: bool = False,
-                 show_label_level_plots: bool = True, show_anchor_level_plot: bool = False,
-                 every_matrix_in_single_plot: bool = True,
+                 show_label_level_plots: bool = True, show_anchor_level_plot: bool = False, show_loss_plot: bool = True,
+                 every_matrix_in_single_plot: bool = True, default_max_val: float = 0.1,
+                 mat_figsize: tuple = (14, 10), mat_annot_kws_size: int = 35, mat_label_size: int = 25,
                  main_plot_fig_size: tuple = (26, 13), show_anchors_annotation: bool = False,
                  vmax_overlap: float = 0.5, vmax_proximity: float = 0.5,
                  annotate_images: bool = True, k_annot_clf: int = 40, orig_images: list = None,
@@ -156,6 +157,7 @@ class ClusterPlot:
         plots and info
         :param show_fig: show main figure or not
         :param save_fig: save main figure or not
+        :param figsize: tuple figure size of main plot
         :param do_animation: make animation gif of the relaxation
         :param use_spline: use spline to find the bounding polygon - NOT RECOMMENDED
         :param alpha: alpha for alpha shape algorithm. it is used to find the concave hull of each class in 2D.
@@ -172,12 +174,17 @@ class ClusterPlot:
         :param show_anchors: show the anchors in the 2D plot or not
         :param show_points: show the points in the 2D plot or not. use this flag for benchmarking and comparison of
         clusters-plot to other methods
-        :param show_polygons: show the polygons in the 2D plot, set to False for benchmarking and comparison of
+        :param show_blobs: show the polygons in the 2D plot, set to False for benchmarking and comparison of
         clusters-plot to other methods
         :param show_inner_blobs: show the inner blobs created by the voronoi regions induced by the anchors in 2D.
         :param show_label_level_plots: show overlap and proximity matrices normalized to label level
         :param show_anchor_level_plot: show overlap and proximity matrices in anchor (sub-cluster) granularity
+        :param show_loss_plot: show loss value per iteration plot
         :param every_matrix_in_single_plot: plot every matrix in single plot or all of matrices in same plot
+        :param default_max_val: Default maximum value for matrices heatmaps. default 0.1
+        :param mat_figsize: Tuple size of f=matrices figure
+        :param mat_annot_kws_size: size of text annotation on matrices
+        :param mat_label_size: size of label in matrices plot
         :param main_plot_fig_size: main plot fig size
         :param show_anchors_annotation: annotate anchors label and subcluster on the plot
         :param vmax_overlap: upper bound for overlap heatmaps
@@ -297,6 +304,7 @@ class ClusterPlot:
         self.dataset = dataset
         self.show_fig = show_fig
         self.save_fig = save_fig
+        self.figsize = figsize
         self.do_animation = do_animation
         self.use_spline = use_spline
         self.alpha = alpha
@@ -308,11 +316,16 @@ class ClusterPlot:
         self.save_fig_every = save_fig_every
         self.show_points = show_points
         self.show_anchors = show_anchors
-        self.show_polygons = show_polygons
+        self.show_blobs = show_blobs
         self.show_inner_blobs = show_inner_blobs
         self.show_label_level_plots = show_label_level_plots
         self.show_anchor_level_plot = show_anchor_level_plot
+        self.show_loss_plot = show_loss_plot
         self.every_matrix_in_single_plot = every_matrix_in_single_plot
+        self.default_max_val = default_max_val
+        self.mat_figsize = mat_figsize
+        self.mat_annot_kws_size = mat_annot_kws_size
+        self.mat_label_size = mat_label_size
         self.main_plot_fig_size = main_plot_fig_size
         self.show_anchors_annotation = show_anchors_annotation
         self.vmax_overlap = vmax_overlap
@@ -449,13 +462,91 @@ class ClusterPlot:
 
         return self.low_dim_anchors
 
-    def cluster_plot(self):
+    def cluster_plot(self, figsize: tuple = None,
+                     show_blobs: bool = None,
+                     show_points: bool = None,
+                     show_anchors: bool = None,
+                     show_anchors_annotation: bool = None,
+                     show_inner_blobs: bool = None,
+                     douglas_peucker_tolerance: float = None,
+                     smooth_iter: int = None,
+                     show_label_level_plots: bool = None,
+                     show_anchor_level_plot: bool = None,
+                     show_loss_plot: bool = None,
+                     default_max_val: float = None,
+                     mat_figsize: tuple = None,
+                     mat_annot_kws_size: int = None,
+                     mat_label_size: int = None
+                     ):
         """
         Plot Cluster Plot
-        TODO ORM add ability to override constructor params
-        :return:
+        All default values of argument are None, None means taking the value from the constructor, otherwise the value
+        is overriden.
+        :param figsize: Figure size of main plot
+        :param show_blobs: Show ClusterPlot blobs
+        :param show_points: Show points on main plot or not
+        :param show_anchors: Show anchors on main plot or not
+        :param show_anchors_annotation: Show annotation labels ans subcluster on anchors
+        :param show_inner_blobs: Show Voronoi regions
+        :param douglas_peucker_tolerance: tolerance of Douglas Peucker smoothing algorithm
+        :param smooth_iter: How many smoothing iterations using cutting corner algorithm
+        :param show_label_level_plots: Show relations matrices in label level
+        :param show_anchor_level_plot: Show relation matrices in anchor level
+        :param show_loss_plot: Show loss plot or not
+        :param default_max_val: Maximum default value for heatmaps in matrices plot
+        :param mat_figsize: Figure size of relation matrices
+        :param mat_annot_kws_size: Size of annotations on matrices plot
+        :param mat_label_size: Size of label in matrices plot
+        :return: None
         """
-        self._cluster_plot_set_sns(self.n_iter)
+
+        if figsize is None:
+            figsize = self.figsize
+        if show_points is None:
+            show_points = self.show_points
+        if show_blobs is None:
+            show_blobs = self.show_blobs
+        if show_anchors is None:
+            show_anchors = self.show_anchors
+        if show_anchors_annotation is None:
+            show_anchors_annotation = self.show_anchors_annotation
+        if show_inner_blobs is None:
+            show_inner_blobs = self.show_inner_blobs
+        if douglas_peucker_tolerance is None:
+            douglas_peucker_tolerance = self.douglas_peucker_tolerance
+        if smooth_iter is None:
+            smooth_iter = self.smooth_iter
+        if show_label_level_plots is None:
+            show_label_level_plots = self.show_label_level_plots
+        if show_anchor_level_plot is None:
+            show_anchor_level_plot = self.show_anchor_level_plot
+        if show_loss_plot is None:
+            show_loss_plot = self.show_loss_plot
+        if default_max_val is None:
+            default_max_val = self.default_max_val
+        if mat_figsize is None:
+            mat_figsize = self.mat_figsize
+        if mat_annot_kws_size is None:
+            mat_annot_kws_size = self.mat_annot_kws_size
+        if mat_label_size is None:
+            mat_label_size = self.mat_label_size
+
+        self._cluster_plot_set_sns(self.n_iter, figsize=figsize,
+                                   show_blobs=show_blobs,
+                                   show_points=show_points,
+                                   show_anchors=show_anchors,
+                                   show_anchors_annotation=show_anchors_annotation,
+                                   show_inner_blobs=show_inner_blobs,
+                                   douglas_peucker_tolerance=douglas_peucker_tolerance,
+                                   smooth_iter=smooth_iter,
+                                   show_label_level_plots=show_label_level_plots,
+                                   show_anchor_level_plot=show_anchor_level_plot,
+                                   show_loss_plot=show_loss_plot,
+                                   default_max_val = default_max_val,
+                                   mat_figsize=mat_figsize,
+                                   mat_annot_kws_size=mat_annot_kws_size,
+                                   mat_label_size=mat_label_size
+                                   )
 
     def _get_intra_class_anchors(self, X, y):
         """
@@ -1187,7 +1278,23 @@ class ClusterPlot:
                                                magnitudes[ra_i])
             if (self.save_fig or self.show_fig) and i % self.save_fig_every == 0:
                 saved_iterations_for_gif.append(i)
-                self._cluster_plot_set_sns(i)
+                self._cluster_plot_set_sns(i,
+                                           figsize=self.figsize,
+                                           show_blobs=self.show_blobs,
+                                           show_points=self.show_points,
+                                           show_anchors=self.show_anchors,
+                                           show_anchors_annotation=self.show_anchors_annotation,
+                                           show_inner_blobs=self.show_inner_blobs,
+                                           douglas_peucker_tolerance=self.douglas_peucker_tolerance,
+                                           smooth_iter=self.smooth_iter,
+                                           show_label_level_plots=self.show_label_level_plots,
+                                           show_anchor_level_plot=self.show_anchor_level_plot,
+                                           show_loss_plot=self.show_loss_plot,
+                                           default_max_val=self.default_max_val,
+                                           mat_figsize=self.mat_figsize,
+                                           mat_annot_kws_size=self.mat_annot_kws_size,
+                                           mat_label_size=self.mat_label_size
+                )
 
         if self.do_animation:
             gif_path = f'{self.output_dir}/animation.gif'
@@ -1196,16 +1303,76 @@ class ClusterPlot:
                     for j in range(5):
                         writer.append_data(imageio.imread(f'{self.output_dir}/iter_{i}_points_anchors_patches_plot.png'))
 
-    def _cluster_plot_set_sns(self, i):
+    def _cluster_plot_set_sns(self, i,
+                              figsize: tuple = (21, 15),
+                              show_blobs: bool = True,
+                              show_points: bool = False,
+                              show_anchors: bool = False,
+                              show_anchors_annotation: bool = False,
+                              show_inner_blobs: bool = False,
+                              douglas_peucker_tolerance: float = 0.6,
+                              smooth_iter: int = 3,
+                              show_label_level_plots: bool = True,
+                              show_anchor_level_plot: bool = False,
+                              show_loss_plot: bool = True,
+                              default_max_val: float = 0.1,
+                              mat_figsize: tuple = (14, 10),
+                              mat_annot_kws_size: int = 35,
+                              mat_label_size: int = 25
+                              ):
         sns.set_style("darkgrid")
-        self._anchors_plot_sns_separate(i)
+        self._anchors_plot_sns_separate(i, figsize=figsize,
+                                        show_blobs=show_blobs,
+                                        show_points=show_points,
+                                        show_anchors=show_anchors,
+                                        show_anchors_annotation=show_anchors_annotation,
+                                        show_inner_blobs=show_inner_blobs,
+                                        douglas_peucker_tolerance=douglas_peucker_tolerance,
+                                        smooth_iter=smooth_iter,
+                                        show_label_level_plots=show_label_level_plots,
+                                        show_anchor_level_plot=show_anchor_level_plot,
+                                        show_loss_plot=show_loss_plot,
+                                        default_max_val=default_max_val,
+                                        mat_figsize=mat_figsize,
+                                        mat_annot_kws_size=mat_annot_kws_size,
+                                        mat_label_size=mat_label_size
+                                        )
         sns.reset_defaults()
 
-    def _anchors_plot_sns_separate(self, i):
+    def _anchors_plot_sns_separate(self, i, figsize: tuple = (21, 15),
+                                   show_blobs: bool = True,
+                                   show_points: bool = False,
+                                   show_anchors: bool = False,
+                                   show_anchors_annotation: bool = False,
+                                   show_inner_blobs: bool = False,
+                                   douglas_peucker_tolerance: float = 0.6,
+                                   smooth_iter: int = 3,
+                                   show_label_level_plots: bool = True,
+                                   show_anchor_level_plot: bool = False,
+                                   show_loss_plot: bool = True,
+                                   default_max_val: float = 0.1,
+                                   mat_figsize: tuple = (14, 10),
+                                   mat_annot_kws_size: int = 35,
+                                   mat_label_size: int = 25
+                                   ):
         """
-        Plot results
-        :param i: iteration
-        :param is_first: is first iteration of relaxation
+        Plot the results
+        :param i: Iteration Number
+        :param figsize: Figure size of main plot
+        :param show_blobs: Show ClusterPlot blobs
+        :param show_points: Show points on main plot or not
+        :param show_anchors: Show anchors on main plot or not
+        :param show_anchors_annotation: Show annotation labels ans subcluster on anchors
+        :param show_inner_blobs: Show Voronoi regions
+        :param douglas_peucker_tolerance: tolerance of Douglas Peucker smoothing algorithm
+        :param smooth_iter: How many smoothing iterations using cutting corner algorithm
+        :param show_label_level_plots: Show relations matrices in label level
+        :param show_anchor_level_plot: Show relation matrices in anchor level
+        :param show_loss_plot: Show loss plot or not
+        :param default_max_val: Maximum default value for heatmaps in matrices plot
+        :param mat_figsize: Figure size of relation matrices
+        :param mat_annot_kws_size: Size of annotations on matrices plot
+        :param mat_label_size: Size of label in matrices plot
         :return: None
         """
         df = pd.DataFrame(data=self.low_dim_points, columns=[self.x_col, self.y_col])
@@ -1221,24 +1388,51 @@ class ClusterPlot:
 
         # main plot
         #   plot main plot anyway
-        self._points_anchors_patches_plot(df, i, show_inner_blobs=False, annotate_images=False)
+        self._points_anchors_patches_plot(df, i, show_inner_blobs=False, annotate_images=False, figsize=figsize,
+                                          show_blobs=show_blobs,
+                                          show_points=show_points,
+                                          show_anchors=show_anchors,
+                                          show_anchors_annotation=show_anchors_annotation,
+                                          douglas_peucker_tolerance=douglas_peucker_tolerance,
+                                          smooth_iter=smooth_iter)
         #   if blobs main plot with blobs
-        if self.show_inner_blobs:
-            self._points_anchors_patches_plot(df, i, show_inner_blobs=True, annotate_images=False)
+        if show_inner_blobs:
+            self._points_anchors_patches_plot(df, i, show_inner_blobs=True, annotate_images=False, figsize=figsize,
+                                              show_blobs=show_blobs,
+                                              show_points=show_points,
+                                              show_anchors=show_anchors,
+                                              show_anchors_annotation=show_anchors_annotation,
+                                              douglas_peucker_tolerance=douglas_peucker_tolerance,
+                                              smooth_iter=smooth_iter)
         #   if images plot
         if self.annotate_images:
-            self._points_anchors_patches_plot(df, i, show_inner_blobs=False, annotate_images=True)
+            self._points_anchors_patches_plot(df, i, show_inner_blobs=False, annotate_images=True, figsize=figsize,
+                                              show_blobs=show_blobs,
+                                              show_points=show_points,
+                                              show_anchors=show_anchors,
+                                              show_anchors_annotation=show_anchors_annotation,
+                                              douglas_peucker_tolerance=douglas_peucker_tolerance,
+                                              smooth_iter=smooth_iter)
 
         # matrices
         #   if label level plot
-        if self.show_label_level_plots:
-            self._matrices_plot(label_level=True, iteration=i)
+        if show_label_level_plots:
+            self._matrices_plot(label_level=True, iteration=i, default_max_val=default_max_val,
+                                mat_figsize=mat_figsize,
+                                mat_annot_kws_size=mat_annot_kws_size,
+                                mat_label_size=mat_label_size
+            )
         #   if anchors level plot
-        if self.show_anchor_level_plot:
-            self._matrices_plot(label_level=False, iteration=i)
+        if show_anchor_level_plot:
+            self._matrices_plot(label_level=False, iteration=i, default_max_val=default_max_val,
+                                mat_figsize=mat_figsize,
+                                mat_annot_kws_size=mat_annot_kws_size,
+                                mat_label_size=mat_label_size
+                                )
 
         # loss
-        self._loss_plot()
+        if show_loss_plot:
+            self._loss_plot()
 
 
     @staticmethod
@@ -1255,15 +1449,20 @@ class ClusterPlot:
         a = np.array([[-deltaw, -deltah], [deltaw, deltah_top]])
         return Bbox(extent._points + a)
 
-    def _matrices_plot(self, label_level, iteration):
+    def _matrices_plot(self, label_level, iteration, default_max_val: float=0.1, mat_figsize: tuple=(14, 10),
+                       mat_annot_kws_size: int=35, mat_label_size: int=25):
         """
         Plot overlap and proximity matrices
         :param label_level: label level or sub-cluster level plots
         :param iteration: iteration number
-        :return:
+        :param default_max_val: maximum value for heatmaps default (0.1)
+        :param mat_figsize: Figure size of relation matrices
+        :param mat_annot_kws_size: Size of annotations on matrices plot
+        :param mat_label_size: Size of label in matrices plot
+        :return: None
         """
         a_min = 0
-        a_max = 0.1
+        a_max = default_max_val
         rows = ['Overlap', 'Proximity']
         cols = ['High-Dim', 'Low-Dim', 'Diff']
         label_level_ticks = [self.class_to_label[i] for i in sorted(self.class_to_label.keys())]
@@ -1299,20 +1498,17 @@ class ClusterPlot:
                 'Proximity Low-Dim': {'mat': self.low_dim_proximity_matrix, 'ticks': label_level_ticks},
             }
         if not self.every_matrix_in_single_plot:
-            fig, axs = plt.subplots(len(rows), len(cols), figsize=(38, 25))
+            fig, axs = plt.subplots(len(rows), len(cols), figsize=(mat_figsize[0] * len(cols), mat_figsize[1] * len(rows)))
         for i, row in enumerate(rows):
             for j, col in enumerate(cols):
                 if self.every_matrix_in_single_plot:
-                    fig, ax = plt.subplots(1,1, figsize=(14,10))
+                    fig, ax = plt.subplots(1, 1, figsize=mat_figsize)
                 else:
                     ax = axs[i][j]
                 matrix_key = f'{row} {col}'
                 matrix = matrices[matrix_key]['mat']
                 if self.mask_relation_in_same_label:
                     np.fill_diagonal(matrix, np.nan)
-                    vmax_relation = 0.1  # 0.2 for MNIST AE, 0.1 for Deep features
-                else:
-                    vmax_relation = 1
                 ticks = matrices[matrix_key]['ticks']
                 if col == 'Diff':
                     vmin = a_min
@@ -1330,10 +1526,10 @@ class ClusterPlot:
                         vmax = self.vmax_proximity
                 g = sns.heatmap(matrix, ax=ax, annot=annot, fmt='.3f', square=True, cmap=cmap,
                             vmin=vmin, vmax=vmax, center=((vmax - vmin)/2),
-                            xticklabels=ticks, yticklabels=ticks, annot_kws={"size": 35})
+                            xticklabels=ticks, yticklabels=ticks, annot_kws={"size": mat_annot_kws_size})
                 # ax.set_title(matrix_key)   # comment out for paper
-                ax.tick_params(axis='both', which='major', labelsize=25)
-                ax.tick_params(axis='both', which='minor', labelsize=25)
+                ax.tick_params(axis='both', which='major', labelsize=mat_label_size)
+                ax.tick_params(axis='both', which='minor', labelsize=mat_label_size)
                 g.set_yticklabels(g.get_yticklabels(), rotation=0)
                 g.set_xticklabels(g.get_xticklabels(), rotation=90)
                 if self.save_fig and self.every_matrix_in_single_plot:
@@ -1350,7 +1546,6 @@ class ClusterPlot:
                 plt.show()
 
     def _loss_plot(self):
-        # ax = plt.subplot2grid(shape, (0, 0), colspan=2, rowspan=2)
         fig, ax = plt.subplots(figsize=(7, 5))
         sns.lineplot(x=list(range(len(self.losses))), y=self.losses, ax=ax)
         ax.set_xlim((0, self.n_iter + 3))
@@ -1366,20 +1561,24 @@ class ClusterPlot:
         if self.show_fig:
             plt.show()
 
-    def _points_anchors_patches_plot(self, df, i, show_inner_blobs, annotate_images):
-        # fig, ax = plt.subplots(figsize=(14, 10))
-        # TODO ORM figsize parameter
-        fig, ax = plt.subplots(figsize=(21, 15))
-        filled_markers = tuple(['o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X']*10000)
+    def _points_anchors_patches_plot(self, df, i, show_inner_blobs, annotate_images,
+                                     figsize: tuple = (21, 15),
+                                     show_blobs: bool = True,
+                                     show_points: bool = False,
+                                     show_anchors: bool = False,
+                                     show_anchors_annotation: bool = False,
+                                     douglas_peucker_tolerance: float = 0.6,
+                                     smooth_iter: int = 3):
+        fig, ax = plt.subplots(figsize=figsize)
         hue_order = sorted(df[self.label_col].unique())
         # Plot points
-        if self.show_points:
+        if show_points:
             sns.scatterplot(data=df[df['anchor'] == False], x=self.x_col, y=self.y_col, hue=self.label_col,
-                            style=self.cluster_col if self.show_anchors else None, ax=ax,
-                            alpha=0.2 if self.show_polygons else 1, legend=False,
+                            style=self.cluster_col if show_anchors else None, ax=ax,
+                            alpha=0.2 if show_blobs else 1, legend=False,
                             hue_order=hue_order, s=240)
         # Plot anchors
-        if self.show_anchors:
+        if show_anchors:
             sns.scatterplot(data=df[df['anchor'] == True], x=self.x_col, y=self.y_col, hue=self.label_col,
                             ax=ax,
                             alpha=1,
@@ -1392,12 +1591,8 @@ class ClusterPlot:
                          alpha=0,
                          hue_order=hue_order)
         # For each anchor, we add a text above the anchor
-        if self.show_anchors_annotation:
+        if show_anchors_annotation:
             for j, anchor_i in enumerate(self.anchors_indices):
-                # ax.text(self.low_dim_points[anchor_i][0], self.low_dim_points[anchor_i][1],
-                #         f'{str(self.anchor_to_label_cluster(j, visualization=True))}',
-                #         horizontalalignment='center', size='medium',
-                #         color='black', weight='semibold')
                 ax.text(self.low_dim_points[anchor_i][0], self.low_dim_points[anchor_i][1],
                         f'{self.anchors_density[j]}',
                         horizontalalignment='center', size='medium',
@@ -1411,17 +1606,16 @@ class ClusterPlot:
         ylim = (miny - marginy, maxy + marginy)
 
         # Add patches
-        if self.show_polygons:
+        if show_blobs:
             contours_df = self._get_contour_df()
-            import itertools
             palette = itertools.cycle(sns.color_palette())
             for label in sorted(contours_df[self.label_col].unique()):
                 points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
                 concave_hulls = self._get_concave_hull(points, alpha=self.alpha[label],
                                                        remove_outliers_k=self.remove_outliers_k,
                                                        spline=self.use_spline, vis=True,
-                                                       douglas_peucker_tolerance=self.douglas_peucker_tolerance,
-                                                       smooth_iter=self.smooth_iter)
+                                                       douglas_peucker_tolerance=douglas_peucker_tolerance,
+                                                       smooth_iter=smooth_iter)
                 c = next(palette)
                 for concave_hull in concave_hulls:
                     # Skip polygons with very small area that will appear as dots
@@ -1450,8 +1644,8 @@ class ClusterPlot:
                     label_to_contour_df[label] = self._get_concave_hull(points, alpha=self.alpha[label],
                                                                         remove_outliers_k=self.remove_outliers_k,
                                                                         spline=self.use_spline,
-                                                                        douglas_peucker_tolerance=self.douglas_peucker_tolerance,
-                                                                        smooth_iter=self.smooth_iter, vis=True)
+                                                                        douglas_peucker_tolerance=douglas_peucker_tolerance,
+                                                                        smooth_iter=smooth_iter, vis=True)
                     if len(label_to_contour_df[label]) > 1:
                         polygon = MultiPolygon([Polygon(p) for p in label_to_contour_df[label]])
                     else:
@@ -1546,7 +1740,7 @@ class ClusterPlot:
         # Modify legend
         num_labels = df[self.label_col].nunique()
         current_handles, current_labels = plt.gca().get_legend_handles_labels()
-        if self.show_polygons:
+        if show_blobs:
             if not annotate_images:
                 lgd = plt.legend(current_handles[:num_labels + 1], current_labels[:num_labels + 1],
                                  bbox_to_anchor=(1.05, 1), loc=2, fontsize=24)
@@ -1701,10 +1895,6 @@ class ClusterPlot:
             self.logger.debug('before',points.shape)
             points = points[~is_outlier]
             self.logger.debug('after', points.shape)
-            # dist_mat = pairwise_distances(points)
-            # score_each_point = np.mean(dist_mat, axis=1)
-            # is_outlier = score_each_point > np.quantile(score_each_point, remove_outliers_k)
-            # points = points[~is_outlier]
         alpha_shape = alphashape.alphashape(points.tolist(), alpha)
         smooth_shapes = []
         if isinstance(alpha_shape, shapely.geometry.polygon.Polygon):
