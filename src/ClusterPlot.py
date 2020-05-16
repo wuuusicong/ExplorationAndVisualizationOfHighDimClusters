@@ -1,6 +1,4 @@
 # TODO Split library code from code that uses the library
-# TODO pytest
-# TODO pep8
 # TODO Examples only 3D and MNIST without sampling
 # TODO Readme
 # TODO Auto choose birch threshold
@@ -38,6 +36,7 @@ from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.neighbors import KNeighborsClassifier
 
+
 class HandlerLineImage(HandlerBase):
 
     def __init__(self, path, space=15, offset=10):
@@ -48,9 +47,8 @@ class HandlerLineImage(HandlerBase):
 
     def create_artists(self, legend, orig_handle,
                        xdescent, ydescent, width, height, fontsize, trans):
-
         line = matplotlib.lines.Line2D([xdescent + self.offset, xdescent + (width - self.space) / 3. + self.offset],
-                                    [ydescent + height / 2., ydescent + height / 2.])
+                                       [ydescent + height / 2., ydescent + height / 2.])
         line.update_from(orig_handle)
         line.set_clip_on(False)
         line.set_transform(trans)
@@ -228,7 +226,7 @@ class ClusterPlot:
         if anchors_method in ['birch']:
             if n_intra_anchors is not None:
                 self.logger.warning(f'Anchors method {anchors_method} does not require number of anchors '
-                                   f'but n_intra_anchors is {n_intra_anchors}')
+                                    f'but n_intra_anchors is {n_intra_anchors}')
         else:
             if not n_intra_anchors:
                 raise Exception(f'n_intra_anchors is required for {anchors_method}')
@@ -443,7 +441,7 @@ class ClusterPlot:
         self.y_with_centroids = np.concatenate((y, self.intra_class_anchors_labels))
 
         # Assuming centroids are concatenated too in _get_intra_class_anchors
-        self.anchors_indices = [i for i in range(len(self.y_with_centroids)-len(self.intra_class_anchors_labels),
+        self.anchors_indices = [i for i in range(len(self.y_with_centroids) - len(self.intra_class_anchors_labels),
                                                  len(self.y_with_centroids))]
         # Build knn Graph
         if self.do_relaxation:
@@ -542,7 +540,7 @@ class ClusterPlot:
                                    show_label_level_plots=show_label_level_plots,
                                    show_anchor_level_plot=show_anchor_level_plot,
                                    show_loss_plot=show_loss_plot,
-                                   default_max_val = default_max_val,
+                                   default_max_val=default_max_val,
                                    mat_figsize=mat_figsize,
                                    mat_annot_kws_size=mat_annot_kws_size,
                                    mat_label_size=mat_label_size
@@ -588,7 +586,7 @@ class ClusterPlot:
             if self.anchors_method == 'birch':
                 subcluster_centers = cm.subcluster_centers_
             else:
-                subcluster_centers = df[df[self.label_col] == label].groupby([self.label_col, self.cluster_col]).mean()\
+                subcluster_centers = df[df[self.label_col] == label].groupby([self.label_col, self.cluster_col]).mean() \
                     .sort_index().values
             tmp_df = pd.DataFrame(subcluster_centers, columns=feature_cols)
             tmp_df[self.label_col] = label
@@ -669,7 +667,7 @@ class ClusterPlot:
         :return: Tuple (label, sub-cluster)
         """
         anchors_count = 0
-        for i in range(len(self.num_clusters_each_label)-1):
+        for i in range(len(self.num_clusters_each_label) - 1):
             if anchors_count <= anchor_index < anchors_count + self.num_clusters_each_label[i]:
                 if visualization and self.class_to_label is not None:
                     return self.class_to_label[i], anchor_index - anchors_count
@@ -679,7 +677,7 @@ class ClusterPlot:
         if visualization and self.class_to_label is not None:
             return self.class_to_label[len(self.num_clusters_each_label) - 1], anchor_index - anchors_count
         else:
-            return len(self.num_clusters_each_label)-1, anchor_index - anchors_count
+            return len(self.num_clusters_each_label) - 1, anchor_index - anchors_count
 
     def _calc_proximity_matrix(self, dim):
         """
@@ -801,7 +799,8 @@ class ClusterPlot:
                             self.cand_samples_to_plot[anchor] = dict()
                         self.cand_samples_to_plot[anchor]['pure'] = sample_index
                         self.cand_samples_to_plot[anchor]['src_label'] = src_label
-                        self.logger.debug(f'Adding anchor {anchor} to label {src_label} = {self.pure_anchor_per_label[src_label]}')
+                        self.logger.debug(
+                            f'Adding anchor {anchor} to label {src_label} = {self.pure_anchor_per_label[src_label]}')
                         self.pure_anchor_per_label[src_label].append(anchor)
                         if len(self.pure_anchor_per_label[src_label]) == 10:
                             break
@@ -876,8 +875,9 @@ class ClusterPlot:
                                                                             self.y_with_centroids)
             else:
                 self.logger.info('Dim Reduction only anchors')
-                self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(self.X_with_centroids[self.anchors_indices],
-                                                                             self.y_with_centroids[self.anchors_indices])
+                self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(
+                    self.X_with_centroids[self.anchors_indices],
+                    self.y_with_centroids[self.anchors_indices])
         else:
             self.logger.info('UnSupervised Dim Reduction')
             if self.reduce_all_points:
@@ -885,12 +885,14 @@ class ClusterPlot:
                 self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids)
             else:
                 self.logger.info('Dim Reduction only anchors')
-                self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(self.X_with_centroids[self.anchors_indices])
+                self.low_dim_anchors = dim_reduction_algo_inst.fit_transform(
+                    self.X_with_centroids[self.anchors_indices])
         if self.reduce_all_points:
             self.low_dim_anchors = self.low_dim_points[self.anchors_indices]
         else:
             # generate random points for each anchor in the low dimension within radius
-            self.logger.info(f'Dim Reduction only anchors - generate random points in low dim per {self.uniform_points_per}')
+            self.logger.info(
+                f'Dim Reduction only anchors - generate random points in low dim per {self.uniform_points_per}')
 
             # Support random points in Voronoi regions
             label_to_contour_df = dict()
@@ -907,7 +909,7 @@ class ClusterPlot:
                 else:
                     polygon = Polygon(label_to_contour_df[label][0])
                 points = []
-                # if cluster label is broken to multipolygon to voronoi is invalid... need to handle every polygon by itself
+                # if cluster label is broken to multipolygon to voronoi is invalid need to handle every polygon by itself
                 anchor_index = -1  # debug only
                 for anchor, anchor_label in zip(self.low_dim_anchors, self.intra_class_anchors_labels):
                     anchor_index += 1
@@ -917,7 +919,8 @@ class ClusterPlot:
                     if polygon.contains(p) or polygon.intersects(p):
                         points.append(anchor)
                     else:
-                        self.logger.debug(f'ANCHOR: {anchor_index}: {p} is outside of polygon ({type(polygon)}): {polygon}. Skipping anchor')
+                        self.logger.debug(
+                            f'ANCHOR: {anchor_index}: {p} is outside of polygon ({type(polygon)}): {polygon}. Skipping anchor')
                 # handle regions with one or two points
                 if len(points) < 3:
                     for i in range(len(points)):
@@ -1121,13 +1124,15 @@ class ClusterPlot:
             _poly = None
             for i, r in enumerate(self.anchor_voronoi_regions):
                 if self.anchor_voronoi_regions_label[i] == self.intra_class_anchors_labels[anchor_index] and \
-                        (r.contains(low_dim_anchor) or r.intersects(low_dim_anchor)): # in case that the anchor intersects the exterior polygon
+                        (r.contains(low_dim_anchor) or r.intersects(
+                            low_dim_anchor)):  # in case that the anchor intersects the exterior polygon
                     _poly = r
                     break
             if _poly is None:
                 # This is probably sub-cluster with one point that is outlier, so it is outside the polygon and it is
                 # ok to return the anchor
-                self.logger.debug(f'anchor {anchor_index} has no voronoi region. This is sub-cluster with one point that is outlier, so it is outside the polygon and it is returning anchor instead of random point')
+                self.logger.debug(
+                    f'anchor {anchor_index} has no voronoi region. This is sub-cluster with one point that is outlier, so it is outside the polygon and it is returning anchor instead of random point')
                 return [self.low_dim_anchors[anchor_index]]
             minx, miny, maxx, maxy = _poly.bounds
             # generate random points within the bounding box
@@ -1167,7 +1172,7 @@ class ClusterPlot:
 
     @staticmethod
     def _l_inf_loss(X, Y):
-        return np.absolute(X-Y).max()
+        return np.absolute(X - Y).max()
 
     @staticmethod
     def _mse_loss(X, Y):
@@ -1198,7 +1203,9 @@ class ClusterPlot:
         # which means that these anchors should be closer
         # otherwise they should be distant
         directions[diff_mat[src_anchor_indices, target_anchor_indices] > 0] = 1
-        return src_anchor_indices[:self.top_greedy], target_anchor_indices[:self.top_greedy], directions[:self.top_greedy], magnitudes[:self.top_greedy]
+        return src_anchor_indices[:self.top_greedy], target_anchor_indices[:self.top_greedy], directions[
+                                                                                              :self.top_greedy], magnitudes[
+                                                                                                                 :self.top_greedy]
 
     def _mask_inter_class_relations(self):
         """
@@ -1230,13 +1237,15 @@ class ClusterPlot:
         :param magnitude: in which magnitude to relax
         :return: None
         """
-        if self.mask_sparse_subcluster is not None and self.anchors_density[src_anchor_index] < self.mask_sparse_subcluster:
-            self.logger.debug(f'Skipping relaxation of src {src_anchor_index} ({self.anchors_density[src_anchor_index]}) '
-                  f'and target {target_anchor_index} ({self.anchors_density[target_anchor_index]})')
+        if self.mask_sparse_subcluster is not None and self.anchors_density[
+            src_anchor_index] < self.mask_sparse_subcluster:
+            self.logger.debug(
+                f'Skipping relaxation of src {src_anchor_index} ({self.anchors_density[src_anchor_index]}) '
+                f'and target {target_anchor_index} ({self.anchors_density[target_anchor_index]})')
             return
         self.logger.debug(
             f'src: {src_anchor_index} target {target_anchor_index} dir {direction} density {self.anchors_density[src_anchor_index]}'
-            f'loss: {self.inter_class_relations[src_anchor_index][target_anchor_index] - self.inter_class_relations_low_dim[src_anchor_index][target_anchor_index] }')
+            f'loss: {self.inter_class_relations[src_anchor_index][target_anchor_index] - self.inter_class_relations_low_dim[src_anchor_index][target_anchor_index]}')
         src_anchor, target_anchor = self.low_dim_anchors[src_anchor_index], self.low_dim_anchors[target_anchor_index]
         direction_vec = target_anchor - src_anchor
         # update low dim points of all points in the same label cluster
@@ -1248,10 +1257,13 @@ class ClusterPlot:
             magnitude = 1
         if self.learning_rate is not None:
             magnitude = magnitude * self.learning_rate
-        self.logger.debug(f'update src {src_anchor_index} to target {target_anchor_index} dir {direction} magnitude {magnitude} direction_vec {direction_vec}')
-        self.low_dim_points[label_cluster_indices] = self.low_dim_points[label_cluster_indices] + direction * magnitude * direction_vec
+        self.logger.debug(
+            f'update src {src_anchor_index} to target {target_anchor_index} dir {direction} magnitude {magnitude} direction_vec {direction_vec}')
+        self.low_dim_points[label_cluster_indices] = self.low_dim_points[
+                                                         label_cluster_indices] + direction * magnitude * direction_vec
         # update also the low dim anchors
-        self.low_dim_anchors[src_anchor_index] = self.low_dim_anchors[src_anchor_index] + direction * magnitude * direction_vec
+        self.low_dim_anchors[src_anchor_index] = self.low_dim_anchors[
+                                                     src_anchor_index] + direction * magnitude * direction_vec
 
     def _relaxation(self):
         """
@@ -1269,7 +1281,7 @@ class ClusterPlot:
                 self.logger.info(f'loss {loss} < stopping criteria {self.stop_criteria} nothing to do')
                 return
             self.losses.append(loss)
-            self.logger.info(f'Starting iteration {i+1} loss = {loss}')
+            self.logger.info(f'Starting iteration {i + 1} loss = {loss}')
             is_first = True
             for j in range(self.batch_size):
                 src_anchor_indices, target_anchor_indices, directions, magnitudes = self._get_top_anchors_to_relax()
@@ -1301,7 +1313,8 @@ class ClusterPlot:
             with imageio.get_writer(gif_path, mode='I') as writer:
                 for i in saved_iterations_for_gif:
                     for j in range(5):
-                        writer.append_data(imageio.imread(f'{self.output_dir}/iter_{i}_points_anchors_patches_plot.png'))
+                        writer.append_data(
+                            imageio.imread(f'{self.output_dir}/iter_{i}_points_anchors_patches_plot.png'))
 
     def _cluster_plot_set_sns(self, i,
                               figsize: tuple = (21, 15),
@@ -1421,7 +1434,7 @@ class ClusterPlot:
                                 mat_figsize=mat_figsize,
                                 mat_annot_kws_size=mat_annot_kws_size,
                                 mat_label_size=mat_label_size
-            )
+                                )
         #   if anchors level plot
         if show_anchor_level_plot:
             self._matrices_plot(label_level=False, iteration=i, default_max_val=default_max_val,
@@ -1433,7 +1446,6 @@ class ClusterPlot:
         # loss
         if show_loss_plot:
             self._loss_plot()
-
 
     @staticmethod
     def _expand_matplotlib_bbox(extent, sw, sh):
@@ -1449,8 +1461,8 @@ class ClusterPlot:
         a = np.array([[-deltaw, -deltah], [deltaw, deltah_top]])
         return Bbox(extent._points + a)
 
-    def _matrices_plot(self, label_level, iteration, default_max_val: float=0.1, mat_figsize: tuple=(14, 10),
-                       mat_annot_kws_size: int=35, mat_label_size: int=25):
+    def _matrices_plot(self, label_level, iteration, default_max_val: float = 0.1, mat_figsize: tuple = (14, 10),
+                       mat_annot_kws_size: int = 35, mat_label_size: int = 25):
         """
         Plot overlap and proximity matrices
         :param label_level: label level or sub-cluster level plots
@@ -1470,7 +1482,8 @@ class ClusterPlot:
                               range(self.inter_class_relations.shape[0])]
         if label_level:
             matrices = {
-                'Overlap Diff': {'mat': np.clip(np.abs(self.inter_class_relations_label_level - self.inter_class_relations_low_dim_label_level),
+                'Overlap Diff': {'mat': np.clip(
+                    np.abs(self.inter_class_relations_label_level - self.inter_class_relations_low_dim_label_level),
                     a_min=a_min,
                     a_max=a_max), 'ticks': label_level_ticks},
                 'Overlap High-Dim': {'mat': self.inter_class_relations_label_level, 'ticks': label_level_ticks},
@@ -1498,7 +1511,8 @@ class ClusterPlot:
                 'Proximity Low-Dim': {'mat': self.low_dim_proximity_matrix, 'ticks': label_level_ticks},
             }
         if not self.every_matrix_in_single_plot:
-            fig, axs = plt.subplots(len(rows), len(cols), figsize=(mat_figsize[0] * len(cols), mat_figsize[1] * len(rows)))
+            fig, axs = plt.subplots(len(rows), len(cols),
+                                    figsize=(mat_figsize[0] * len(cols), mat_figsize[1] * len(rows)))
         for i, row in enumerate(rows):
             for j, col in enumerate(cols):
                 if self.every_matrix_in_single_plot:
@@ -1513,20 +1527,20 @@ class ClusterPlot:
                 if col == 'Diff':
                     vmin = a_min
                     vmax = a_max
-                    annot=True
+                    annot = True
                     cmap = 'OrRd'
                 else:
                     vmin = 0
                     vmax = self.vmax_overlap
-                    annot=False
+                    annot = False
                     if row == 'Overlap':
                         cmap = 'YlGnBu'
                     else:  # Proximity
                         cmap = 'BuPu'
                         vmax = self.vmax_proximity
                 g = sns.heatmap(matrix, ax=ax, annot=annot, fmt='.3f', square=True, cmap=cmap,
-                            vmin=vmin, vmax=vmax, center=((vmax - vmin)/2),
-                            xticklabels=ticks, yticklabels=ticks, annot_kws={"size": mat_annot_kws_size})
+                                vmin=vmin, vmax=vmax, center=((vmax - vmin) / 2),
+                                xticklabels=ticks, yticklabels=ticks, annot_kws={"size": mat_annot_kws_size})
                 # ax.set_title(matrix_key)   # comment out for paper
                 ax.tick_params(axis='both', which='major', labelsize=mat_label_size)
                 ax.tick_params(axis='both', which='minor', labelsize=mat_label_size)
@@ -1541,7 +1555,8 @@ class ClusterPlot:
         if not self.every_matrix_in_single_plot:
             if self.save_fig:
                 # Save just the portion _inside_ the second axis's boundaries
-                fig.savefig(f'{self.output_dir}/Overlap_and_Proximity_Matrices{"_per_Label" if label_level else ""}.png')
+                fig.savefig(
+                    f'{self.output_dir}/Overlap_and_Proximity_Matrices{"_per_Label" if label_level else ""}.png')
             if self.show_fig:
                 plt.show()
 
@@ -1659,7 +1674,8 @@ class ClusterPlot:
                             points.append(anchor)
                     # handle regions with one or two points
                     if len(points) == 0:
-                        self.logger.debug(f'all points of label {label} are outside the concave hull -> no Voroni skipping')
+                        self.logger.debug(
+                            f'all points of label {label} are outside the concave hull -> no Voroni skipping')
                         continue
                     if len(points) < 3:
                         for i in range(len(points)):
@@ -1688,16 +1704,15 @@ class ClusterPlot:
                             # skip anchors outside the polygon due to simplification
                             if p.exterior is None:
                                 self.logger.debug(f'Skipping voronoi of anchor of label {label} since it is outside '
-                                                   f'of polygon after simplification')
+                                                  f'of polygon after simplification')
                                 continue
                             x, y = p.exterior.coords.xy
-                            inner_blobs = list(zip(x,y))
-                            #plot patch
+                            inner_blobs = list(zip(x, y))
+                            # plot patch
                             line_cmde = [Path.MOVETO] + [Path.LINETO] * (len(inner_blobs) - 2) + [Path.CLOSEPOLY]
                             path = Path(inner_blobs, line_cmde)
                             patch = patches.PathPatch(path, facecolor=None, linewidth=5, edgecolor=c, fill=False)
                             ax.add_patch(patch)
-
 
             if annotate_images:
                 palette = itertools.cycle(sns.color_palette())
@@ -1754,10 +1769,10 @@ class ClusterPlot:
                         pure = self.cand_samples_to_plot[anchor]['pure']
                         src_label = self.cand_samples_to_plot[anchor]['src_label']
                         if self.orig_images:
-                                # probably doesn't work now
+                            # probably doesn't work now
                             img_path = self.orig_images[pure]
                             self.logger.info(f'src_label: {src_label} pure path: \n{img_path}')
-                            handler_map[current_handles[src_label+1]] = HandlerLineImage(img_path)
+                            handler_map[current_handles[src_label + 1]] = HandlerLineImage(img_path)
                         else:
                             self.logger.info(f'src_label: {src_label} pure path: \n{pure}')
 
@@ -1774,7 +1789,6 @@ class ClusterPlot:
             lgd = plt.legend(current_handles[:num_labels + 1], current_labels[:num_labels + 1],
                              bbox_to_anchor=(1.05, 1), loc=2, fontsize=24)
 
-
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
         # remove ticks
@@ -1786,8 +1800,9 @@ class ClusterPlot:
 
         if self.save_fig:
             # Save just the portion _inside_ the second axis's boundaries
-            fig.savefig(f'{self.output_dir}/iter_{i}_points_anchors_patches{"_inner_blobs" if show_inner_blobs else ""}_plot.png',
-                            bbox_extra_artists=(lgd,), bbox_inches='tight')
+            fig.savefig(
+                f'{self.output_dir}/iter_{i}_points_anchors_patches{"_inner_blobs" if show_inner_blobs else ""}_plot.png',
+                bbox_extra_artists=(lgd,), bbox_inches='tight')
             fig.savefig(
                 f'{self.output_dir}/iter_{i}_points_anchors_patches{"_inner_blobs" if show_inner_blobs else ""}_plot_no_legend.png')
             # Save just the portion _inside_ the second axis's boundaries
@@ -1828,7 +1843,9 @@ class ClusterPlot:
                 labels.extend(self.intra_class_anchors_labels)
             else:
                 labels.extend(self.y_with_centroids)
-        anchors_df = pd.DataFrame(anchors_radius, columns=[self.x_col, self.y_col, 'z'] if self.n_components > 2 else [self.x_col, self.y_col])
+        anchors_df = pd.DataFrame(anchors_radius,
+                                  columns=[self.x_col, self.y_col, 'z'] if self.n_components > 2 else [self.x_col,
+                                                                                                       self.y_col])
         anchors_df[self.label_col] = labels
         return anchors_df
 
@@ -1876,7 +1893,8 @@ class ClusterPlot:
             new_poly.append(new_poly[0])
         return new_poly
 
-    def _get_concave_hull(self, points, alpha, remove_outliers_k=None, spline=False, vis=False, douglas_peucker_tolerance=0.6, smooth_iter=13):
+    def _get_concave_hull(self, points, alpha, remove_outliers_k=None, spline=False, vis=False,
+                          douglas_peucker_tolerance=0.6, smooth_iter=13):
         """
         Calculate concave hull of points
         :param alpha: alpha for alphashape algorithm
@@ -1892,7 +1910,7 @@ class ClusterPlot:
             clf = LocalOutlierFactor(n_neighbors=remove_outliers_k, contamination='auto')
             is_outlier = clf.fit_predict(points)
             is_outlier = is_outlier == -1
-            self.logger.debug('before',points.shape)
+            self.logger.debug('before', points.shape)
             points = points[~is_outlier]
             self.logger.debug('after', points.shape)
         alpha_shape = alphashape.alphashape(points.tolist(), alpha)
@@ -1906,7 +1924,7 @@ class ClusterPlot:
             if not spline:
                 if vis:
                     smooth_shape = np.array(ClusterPlot._smooth_poly_Chaikins_corner_cutting_iter(
-                                        ClusterPlot._smooth_poly_Douglas_Peucker(list(zip(x, y)), douglas_peucker_tolerance),
+                        ClusterPlot._smooth_poly_Douglas_Peucker(list(zip(x, y)), douglas_peucker_tolerance),
                         iteration=smooth_iter))
                 else:
                     smooth_shape = np.array(list(zip(x, y)))
@@ -1914,6 +1932,6 @@ class ClusterPlot:
                 tck, u = splprep([np.array(x), np.array(y)], s=3)
                 new_points = splev(u, tck)
                 x, y = new_points[0], new_points[1]
-                smooth_shape = np.array(list(zip(x,y)))
+                smooth_shape = np.array(list(zip(x, y)))
             smooth_shapes.append(smooth_shape)
         return smooth_shapes
