@@ -26,7 +26,8 @@ from matplotlib.image import BboxImage
 from matplotlib import patches
 from matplotlib.path import Path
 from sklearn.manifold import MDS, TSNE
-from sklearn.decomposition import PCA, LatentDirichletAllocation
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.decomposition import PCA
 from sklearn.cluster import AgglomerativeClustering, KMeans, Birch
 from sklearn.neighbors import kneighbors_graph
 from scipy.interpolate import splprep, splev
@@ -864,15 +865,18 @@ class ClusterPlot:
         elif self.dim_reduction_algo == 'pca':
             dim_reduction_algo_inst = PCA(n_components=self.n_components, random_state=self.random_state)
         elif self.dim_reduction_algo == 'lda':
-            dim_reduction_algo_inst = LatentDirichletAllocation(n_components=self.n_components,
-                                                                random_state=self.random_state)
+            dim_reduction_algo_inst = LinearDiscriminantAnalysis(n_components=self.n_components)
         else:
             raise Exception(f'Dimension reduction algorithm {self.dim_reduction_algo} is not supported')
         if self.supervised:
             self.logger.info('Supervised Dim Reduction')
             if self.reduce_all_points:
                 self.logger.info('Dim Reduction all points')
-                self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids,
+                if self.dim_reduction_algo == 'lda':
+                    self.low_dim_points = dim_reduction_algo_inst.fit(self.X_with_centroids,
+                                                                      self.y_with_centroids).transform(self.X_with_centroids)
+                else:
+                    self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids,
                                                                             self.y_with_centroids)
             else:
                 self.logger.info('Dim Reduction only anchors')

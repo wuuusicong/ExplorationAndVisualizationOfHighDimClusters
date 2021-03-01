@@ -31,7 +31,8 @@ class DataSetFactory:
         Get MNIST dataset
         :return: DataSet Object which holds MNIST data
         """
-        X, y = datasets.fetch_openml('mnist_784', version=1, return_X_y=True)
+        X, y = datasets.fetch_openml('mnist_784', version=1, return_X_y=True,
+                                     data_home='C:\\Users\\omalkai\\Google Drive\\Thesis\\Dani Cohen Or\\Code\ExplorationAndVisualizationOfHighDimClusters\\data')
         X = X / 255.
         feature_cols = ['pixel' + str(i) for i in range(X.shape[1])]
         df = pd.DataFrame(X, columns=feature_cols)
@@ -56,7 +57,7 @@ class DataSetFactory:
         Get Covtype dataset
         :return: DataSet Object which holds MNIST data
         """
-        X, y = datasets.fetch_covtype(return_X_y=True)
+        X, y = datasets.fetch_covtype(return_X_y=True, data_home='C:\\Users\\omalkai\\Google Drive\\Thesis\\Dani Cohen Or\\Code\ExplorationAndVisualizationOfHighDimClusters\\data')
         feature_cols = [
     'Elevation',
     'Aspect',
@@ -617,7 +618,11 @@ class DataSetFactory:
         if dataset_name == 'MNIST-DEEP-32-64-750-984':
             return DataSetFactory.mnist_deep(dim=None, epoch_acc=(750,'98_4'), sample=sample, is_subset=is_subset, random_state=random_state)
         if dataset_name in ['fists_no_overlap', 'cross', 'cross-denses', 'cross7', 'simple_overlap', 'dense_in_sparse', 'hourglass',
-                              'hourglass-spike', 'hourglass2']:
+                            'hourglass-spike', 'hourglass2',
+                            '4clusters_1', '4clusters_2', '4clusters_3', '4clusters_1_v2', '4clusters_3_v2',
+                            '6clusters_1', '6clusters_2', '6clusters_3', '6clusters_2_v2', '6clusters_3_v2',
+                            '6clusters_2_v3',
+                            '8clusters_1', '8clusters_2', '8clusters_3', '8clusters_1_v2', '8clusters_2_v2']:
             df, feature_cols, label_col = pf.PolygonsFactory.get_polygons(dataset_name)
             return DataSet(df, feature_cols, label_col, class_to_label={label: f'Poly{label}' for label in df[label_col].unique()})
         if dataset_name in ['FashionMNIST', 'FashionMNIST64']:

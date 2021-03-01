@@ -24,12 +24,35 @@ class PolygonsGenerator:
     Z_COL = 'Z'
     POLY_COL = 'Poly'
     FEAT_COLS = [X_COL, Y_COL, Z_COL]
+    # '#e41a1c',  # red
+    # '#377eb8',  # blue
+    # '#4daf4a',  # green
+    # '#ff7f00',  # orange
+    # '#ffff33',  # yellow
+    # '#a65628',  # brown
+    # '#984ea3',  # purple
+    # '#f781bf'   # pink
+    DEFAULT_PLOTLY_COLORS = ['rgb(228, 26, 28)',
+                             'rgb(55, 126, 184)',
+                             'rgb(77, 175, 74)',
+                             'rgb(255, 127, 0)',
+                             'rgb(255, 255, 51)',
+                             'rgb(166, 86, 40)',
+                             'rgb(152, 78, 163)',
+                             'rgb(247, 129, 191)',
+                             ]
 
-    DEFAULT_PLOTLY_COLORS = ['rgb(31, 119, 180)', 'rgb(255, 127, 14)',
-                             'rgb(44, 160, 44)', 'rgb(214, 39, 40)',
-                             'rgb(148, 103, 189)', 'rgb(140, 86, 75)',
-                             'rgb(227, 119, 194)', 'rgb(127, 127, 127)',
-                             'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
+    #
+    # DEFAULT_PLOTLY_COLORS = ['rgb(31, 119, 180)',
+    #                          'rgb(255, 127, 14)',
+    #                          'rgb(44, 160, 44)',
+    #                          'rgb(214, 39, 40)',
+    #                          'rgb(148, 103, 189)',
+    #                          'rgb(140, 86, 75)',
+    #                          'rgb(227, 119, 194)',
+    #                          'rgb(127, 127, 127)',
+    #                          'rgb(188, 189, 34)',
+    #                          'rgb(23, 190, 207)']
 
     def __init__(self, smooth_iter=3, random_points=200):
         """
@@ -149,9 +172,9 @@ class PolygonsGenerator:
                 fig.add_trace(go.Scatter(x=polys[i][PolygonsGenerator.INNER_POINTS][:, 0],
                                          y=polys[i][PolygonsGenerator.INNER_POINTS][:, 1],
                                          mode='markers',
-                                         name=f'poly{i}'))
-            #                                 marker_color=f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})'))
-            #                                  marker_color=c))
+                                         name=f'poly{i}',
+                                            # marker_color=f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})'))
+                                             marker_color=c))
             fig.update_layout(title=f'{title}: 2D Visualization')
             fig.show()
 
@@ -166,9 +189,9 @@ class PolygonsGenerator:
                                            y=polys[i][PolygonsGenerator.INNER_POINTS][:, 1],
                                            z=polys[i][PolygonsGenerator.INNER_POINTS][:, 2],
                                            mode='markers',
-                                           name=f'poly{i}'))
+                                           name=f'poly{i}',
             #                                  marker_color=f'rgba({c[0]}, {c[1]}, {c[2]}, {c[3]})'))
-            #                                    marker_color=c))
+                                               marker_color=c))
             fig.update_layout(title=f'{title}: 3D Visualization')
             fig.show()
 
@@ -720,6 +743,1108 @@ class PolygonsFactory:
             df = pd.concat([df1, df2])
 
             return df, feature_cols, POLY_COL
+        elif polygons_name == '4clusters_1':
+            pg = PolygonsGenerator(random_points=[200, 200, 200, 200])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [4.5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 0.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6.5, 3],
+                    [8, 3.5],
+                    [9.5, 3],
+                    [8, 2.5],
+                    [6.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '4clusters_1_v2':
+            pg = PolygonsGenerator(random_points=[200, 200, 200, 200])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [4, 1.5],
+                    [4.5, 2.5],
+                    [5, 1.5],
+                    [4.5, 0.5],
+                    [4, 1.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 0.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 3],
+                    [7.5, 3.5],
+                    [9, 3],
+                    [7.5, 2.5],
+                    [6, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '4clusters_2':
+            pg = PolygonsGenerator(random_points=[200, 200, 200, 200])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3, 0.5],
+                    [3.5, 1.5],
+                    [4, 0.5],
+                    [3.5, -0.5],
+                    [3, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 1.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6.5, 3],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '4clusters_3':
+            pg = PolygonsGenerator(random_points=[200, 200, 200, 200])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [4.5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [9.5, 3],
+                    [11.5, 2],
+                    [13.5, 3],
+                    [11.5, 0],
+                    [9.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6.5, 3],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '4clusters_3_v2':
+            pg = PolygonsGenerator(random_points=[200, 200, 200, 600])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [4.5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [9.5, 3],
+                    [11.5, 2],
+                    [13.5, 3],
+                    [11.5, 0],
+                    [9.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6.5, 3],
+                    [10, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 1)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '6clusters_1':
+            pg = PolygonsGenerator(random_points=[200, 200, 200, 200, 200, 200])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [4, 0],
+                    [4.5, 1],
+                    [5, 0],
+                    [4.5, -1],
+                    [4, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 0.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 3],
+                    [8, 3.5],
+                    [9.5, 3],
+                    [8, 2.5],
+                    [6, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5.5, 8],
+                    [6, 2.5],
+                    [8, 3],
+                    [6, 5],
+                    [5.5, 8],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2.5, 2],
+                    [5, 3],
+                    [5.5, 2],
+                    [5, 1],
+                    [2.5, 2],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '6clusters_2':
+            pg = PolygonsGenerator(random_points=[400]*6)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [4.5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 1.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 4],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6, 4],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2, 3],
+                    [4.5, 4],
+                    [5, 3],
+                    [4.5, 2],
+                    [2, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [0.5, 3],
+                    [3, 4],
+                    [3.5, 3],
+                    [3, 2],
+                    [0.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '6clusters_2_v2':
+            pg = PolygonsGenerator(random_points=[400, 400, 800, 400, 400, 400])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [1.25, 0.5],
+                    [4, 1.5],
+                    [4.5, 0.5],
+                    [4, -0.5],
+                    [1.25, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 1.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 4],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5.5, 1],
+                    [5.5, 4],
+                    [8.5, 1],
+                    [6, 0.5],
+                    [5.5, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2, 3],
+                    [4.5, 4],
+                    [5, 3],
+                    [4.5, 2],
+                    [2, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [0.5, 3],
+                    [3, 4],
+                    [3.5, 3],
+                    [3, 2],
+                    [0.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '6clusters_2_v3':
+            pg = PolygonsGenerator(random_points=[400, 400, 800, 400, 400, 400])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [1.25, 0.5],
+                    [4, 1.5],
+                    [4.5, 0.5],
+                    [4, -0.5],
+                    [1.25, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 1.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 4],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5.5, 1],
+                    [5.5, 4],
+                    [8.5, 1],
+                    [6, 0.5],
+                    [5.5, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2, 3],
+                    [4.5, 4],
+                    [5, 3],
+                    [4.5, 2],
+                    [2, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2.5, 4],
+                    [5, 5],
+                    [5.5, 4],
+                    [5, 3],
+                    [2.5, 4],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '6clusters_3':
+            pg = PolygonsGenerator(random_points=[400]*6)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [9.5, 3],
+                    [11.5, 2],
+                    [13.5, 3],
+                    [11.5, 0],
+                    [9.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6.5, 3],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [8, 1],
+                    [8, 3],
+                    [13, 1.5],
+                    [10, 2],
+                    [8, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5, -2],
+                    [6, 0.5],
+                    [10, -2],
+                    [5, -2],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '6clusters_3_v2':
+            pg = PolygonsGenerator(random_points=[400, 400, 1000, 600, 400, 600])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [10.5, 3],
+                    [12.5, 2],
+                    [14.5, 3],
+                    [12.5, 0],
+                    [10.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6.5, 3],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [9, 1],
+                    [9, 3],
+                    [14, 1.5],
+                    [11, 2],
+                    [9, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5, -2],
+                    [6, 0.5],
+                    [10, -2],
+                    [5, -2],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '6clusters_3_v3':
+            pg = PolygonsGenerator(random_points=[400, 400, 1000, 600, 400, 600])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [9.5, 3],
+                    [11.5, 2],
+                    [13.5, 3],
+                    [11.5, 0],
+                    [9.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6.5, 3],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [8, 1],
+                    [8, 3],
+                    [13, 1.5],
+                    [10, 2],
+                    [8, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5, -2],
+                    [6, 0.5],
+                    [10, -2],
+                    [5, -2],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '8clusters_1':
+            pg = PolygonsGenerator(random_points=[400]*8)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [4, 0],
+                    [4.5, 1],
+                    [5, 0],
+                    [4.5, -1],
+                    [4, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 0.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 3],
+                    [8, 3.5],
+                    [9.5, 3],
+                    [8, 2.5],
+                    [6, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5.5, 8],
+                    [6, 2.5],
+                    [8, 3],
+                    [6, 5],
+                    [5.5, 8],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2.5, 2],
+                    [5, 3],
+                    [5.5, 2],
+                    [5, 1],
+                    [2.5, 2],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [8, 0],
+                    [8.5, 1],
+                    [9, 0],
+                    [8.5, -1],
+                    [8, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 0],
+                    [6.5, 1.5],
+                    [7.5, 0],
+                    [6.5, -1],
+                    [6, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '8clusters_1_v2':
+            pg = PolygonsGenerator(random_points=[400] * 8)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [4, 0],
+                    [4.5, 1],
+                    [5, 0],
+                    [4.5, -1],
+                    [4, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 4.5],
+                    [7.5, 3],
+                    [5.5, 0.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 3],
+                    [8, 3.5],
+                    [9.5, 3],
+                    [8, 2.5],
+                    [6, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5.5, 8],
+                    [6, 2.5],
+                    [8, 3],
+                    [6, 5],
+                    [5.5, 8],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2.5, 3],
+                    [5, 4],
+                    [5.5, 3],
+                    [5, 2],
+                    [2.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [8, 0],
+                    [8.5, 1],
+                    [9, 0],
+                    [8.5, -1],
+                    [8, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 0],
+                    [6.5, 1.5],
+                    [7.5, 0],
+                    [6.5, -1],
+                    [6, 0],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '8clusters_2':
+            pg = PolygonsGenerator(random_points=[400]*8)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 8],
+                    [10, 3],
+                    [5.5, 1.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 4],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6, 4],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2, 3],
+                    [4.5, 4],
+                    [5, 3],
+                    [4.5, 2],
+                    [2, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [0.5, 3],
+                    [3, 4],
+                    [3.5, 3],
+                    [3, 2],
+                    [0.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 9],
+                    [7, 4],
+                    [11, 6],
+                    [7, 6],
+                    [6, 9],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3, 4.5],
+                    [5, 5.5],
+                    [5.5, 4.5],
+                    [5, 3.5],
+                    [3, 4.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '8clusters_2_v2':
+            pg = PolygonsGenerator(random_points=[400, 400, 1200, 200, 400, 400, 400, 400])
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 3],
+                    [5.5, 8],
+                    [10, 3],
+                    [5.5, 1.5],
+                    [3.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 4],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6, 4],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [2, 3],
+                    [4.5, 4],
+                    [5, 3],
+                    [4.5, 2],
+                    [2, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [0.5, 3],
+                    [3, 4],
+                    [3.5, 3],
+                    [3, 2],
+                    [0.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 9],
+                    [7, 4],
+                    [11, 6],
+                    [7, 6],
+                    [6, 9],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3, 4.5],
+                    [5, 5.5],
+                    [5.5, 4.5],
+                    [5, 3.5],
+                    [3, 4.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+        elif polygons_name == '8clusters_3':
+            pg = PolygonsGenerator(random_points=[400]*8)
+            polys = [
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [4, 1.5],
+                    [5, 0.5],
+                    [4, -0.5],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [9.5, 3],
+                    [11.5, 2],
+                    [13.5, 3],
+                    [11.5, 0],
+                    [9.5, 3],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [3.5, 0.5],
+                    [5.5, 3],
+                    [7.5, 0.5],
+                    [5.5, -1],
+                    [3.5, 0.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [6, 1],
+                    [6.5, 3],
+                    [9, 1],
+                    [6.5, 0.5],
+                    [6, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [8, 1],
+                    [8, 3],
+                    [13, 1.5],
+                    [10, 2],
+                    [8, 1],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [5, -2],
+                    [6, 0.5],
+                    [10, -2],
+                    [5, -2],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [11.5, 1.5],
+                    [13, 0],
+                    [11.5, 0.5],
+                    [10, 0],
+                    [11.5, 1.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+                {PolygonsGenerator.POLY: [
+                    [10.5, -1.5],
+                    [11, -0.5],
+                    [12, -1.5],
+                    [11, -2.5],
+                    [10.5, -1.5],
+                ],
+                    PolygonsGenerator.SMOOTH_POLY: None, PolygonsGenerator.INNER_POINTS: None,
+                    PolygonsGenerator.Z_DIST: (0, 0.5)},
+                # ==============================================================================
+            ]
+            return pg.preprocess_polygons(polys)
+
         else:
             raise Exception(f'Unsupported polygons {polygons_name}')
 

@@ -26,7 +26,8 @@ from matplotlib.image import BboxImage
 from matplotlib import patches
 from matplotlib.path import Path
 from sklearn.manifold import MDS, TSNE
-from sklearn.decomposition import PCA, LatentDirichletAllocation
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.decomposition import PCA
 from sklearn.cluster import AgglomerativeClustering, KMeans, Birch
 from sklearn.neighbors import kneighbors_graph
 from scipy.interpolate import splprep, splev
@@ -36,6 +37,19 @@ from scipy.spatial import Voronoi
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.neighbors import KNeighborsClassifier
+
+SNS_ORIG_COLOR_PALLETE = sns.color_palette()
+MY_PALLETE = [
+    '#e41a1c',  # red
+    '#377eb8',  # blue
+    '#4daf4a',  # green
+    '#ff7f00',  # orange
+    '#ffff33',  # yellow
+    '#a65628',  # brown
+    '#984ea3',  # purple
+    '#f781bf'   # pink
+]
+sns.set_palette(sns.color_palette(MY_PALLETE))
 
 
 class HandlerLineImage(HandlerBase):
@@ -107,9 +121,9 @@ class ClusterPlot:
         :param n_intra_anchors: number of anchors to find, ignored if anchors_method is birch
         :param birch_threshold: birch threshold ignored if anchors_method is not birch
         :param birch_branching_factor: birch_branching_factor ignored if anchors_method is not birch
-        :param dim_reduction_algo: which dimensionality reduction to use, defule UMAP, supported algos: 
+        :param dim_reduction_algo: which dimensionality reduction to use, defule UMAP, supported algos:
         ['t-sne', 'umap', 'mds', 'pca', 'lda']
-        :param supervised: Whether to use supervised dimensionality reduction, available only for umap and 
+        :param supervised: Whether to use supervised dimensionality reduction, available only for umap and
         lda dim_reduction_algo
         :param umap_n_neighbors: number of neighbors to use in umap, ignored if dim_reduction_algo is not umap
         :param umap_min_dist: umap_min_dist to use in umap, ignored if dim_reduction_algo is not umap
@@ -864,15 +878,18 @@ class ClusterPlot:
         elif self.dim_reduction_algo == 'pca':
             dim_reduction_algo_inst = PCA(n_components=self.n_components, random_state=self.random_state)
         elif self.dim_reduction_algo == 'lda':
-            dim_reduction_algo_inst = LatentDirichletAllocation(n_components=self.n_components,
-                                                                random_state=self.random_state)
+            dim_reduction_algo_inst = LinearDiscriminantAnalysis(n_components=self.n_components)
         else:
             raise Exception(f'Dimension reduction algorithm {self.dim_reduction_algo} is not supported')
         if self.supervised:
             self.logger.info('Supervised Dim Reduction')
             if self.reduce_all_points:
                 self.logger.info('Dim Reduction all points')
-                self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids,
+                if self.dim_reduction_algo == 'lda':
+                    self.low_dim_points = dim_reduction_algo_inst.fit(self.X_with_centroids,
+                                                                      self.y_with_centroids).transform(self.X_with_centroids)
+                else:
+                    self.low_dim_points = dim_reduction_algo_inst.fit_transform(self.X_with_centroids,
                                                                             self.y_with_centroids)
             else:
                 self.logger.info('Dim Reduction only anchors')
@@ -1602,6 +1619,7 @@ class ClusterPlot:
                             s=240)
         else:
             # it enables the legend
+            sns.set_palette(sns.color_palette(MY_PALLETE))
             sns.lineplot(data=df[df['anchor'] == True], x=self.x_col, y=self.y_col, hue=self.label_col,
                          ax=ax,
                          alpha=0,
@@ -1624,7 +1642,9 @@ class ClusterPlot:
         # Add patches
         if show_blobs:
             contours_df = self._get_contour_df()
-            palette = itertools.cycle(sns.color_palette())
+            # palette = itertools.cycle(sns.color_palette())
+            sns.set_palette(sns.color_palette(MY_PALLETE))
+            palette = itertools.cycle(sns.color_palette(MY_PALLETE))
             for label in sorted(contours_df[self.label_col].unique()):
                 points = contours_df[contours_df[self.label_col] == label][[self.x_col, self.y_col]].values
                 concave_hulls = self._get_concave_hull(points, alpha=self.alpha[label],
@@ -1650,7 +1670,9 @@ class ClusterPlot:
                 # In case of performance issue, calculate the voronoi regions outside
                 label_to_contour_df = dict()
                 contours_df = self._get_contour_df()
-                palette = itertools.cycle(sns.color_palette())
+                # palette = itertools.cycle(sns.color_palette())
+                sns.set_palette(sns.color_palette(MY_PALLETE))
+                palette = itertools.cycle(sns.color_palette(MY_PALLETE))
                 for label in sorted(contours_df[self.label_col].unique()):
                     c = next(palette)
                     # Skip labels with less than 3 anchors, Voronoi does not support that
