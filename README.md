@@ -20,7 +20,7 @@
 
    libraries for this project
 
-5. ex
+5. ex(main code)
 
    ex contains three doc
 
