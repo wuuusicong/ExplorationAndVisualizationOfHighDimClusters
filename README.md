@@ -43,4 +43,4 @@
 ## Start Cplot
 
 1. pip install -r requirements.txt
-2. cd ../notebooks  Run Hourglass2ForPaper.ipynb
+2. cd ../ex/understand Cplot  Run Hourglass - track the Cplot.ipynb
